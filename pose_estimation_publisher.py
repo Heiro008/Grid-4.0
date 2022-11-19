@@ -90,6 +90,7 @@ class ImageSubscriber(Node):
 
 				self.object_pose.publish(object_pose_msg)
 
+				#use python transformation library to find the inverse transforms
 
 				#if ids[i] == 2:
 
