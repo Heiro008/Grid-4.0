@@ -8,31 +8,53 @@ import numpy as np
 from sensor_msgs.msg import CompressedImage
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Quaternion
-import tf
+import transformations as tf
 from tf2_ros import TransformBroadcaster
+from geometry_msgs.msg import TransformStamped
+
+def isRotationMatrix(R):
+	Rt = np.transpose(R)
+	shouldBeIdentity = np.dot(Rt, R)
+	I = np.identity(3, dtype=R.dtype)
+	n = np.linalg.norm(I - shouldBeIdentity)
+	return n < 1e-6
+def rotationMatrixToEulerAngles(R):
+	assert (isRotationMatrix(R))
+	sy = np.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
+	singular = sy < 1e-6
+	if not singular:
+		x = np.arctan2(R[2, 1], R[2, 2])
+		y = np.arctan2(-R[2, 0], sy)
+		z = np.arctan2(R[1, 0], R[0, 0])
+	else:
+		x = np.arctan2(-R[1, 2], R[1, 1])
+		y = np.arctan2(-R[2, 0], sy)
+		z = 0
+	return np.array([x, y, z])
+
 
 class ImageSubscriber(Node):
 	def __init__(self):
 		super().__init__('image_subscriber')   # subscriber node name
 		#self.subscription = self.create_subscription(CompressedImage, 'camera_image', self.listener_callback, 10)
 
-		self.subscription = self.create_subscription(Image, 'image_raw', self.listener_callback, 10)
+		self.subscription = self.create_subscription(Image, 'camera_image', self.listener_callback, 1)
 		self.subscription
 
 		self.object_pose = self.create_publisher(PoseStamped, '/vision/pose', 1)
 
-        self.camera_pose = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 1)
+		self.camera_pose = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 1)
 
-        self.object_pose_msg = PoseStamped()
-        self.camera_pose_msg = PoseStamped()
-        self.imgae_header = 0
-        self.camera_pose_msg.pose.position.x = 0
-        self.camera_pose_msg.pose.position.y = 0
-        self.camera_pose_msg.pose.position.z = 0
-        self.camera_pose_msg.pose.orientation.x = 0
-        self.camera_pose_msg.pose.orientation.y = 0
-        self.camera_pose_msg.pose.orientation.z = 0.7071
-        self.camera_pose_msg.pose.orientation.w = 0.7071
+		self.object_pose_msg = PoseStamped()
+		self.camera_pose_msg = PoseStamped()
+		self.imgae_header = 0
+		self.camera_pose_msg.pose.position.x = 0.0
+		self.camera_pose_msg.pose.position.y = 0.0
+		self.camera_pose_msg.pose.position.z = 0.0
+		self.camera_pose_msg.pose.orientation.x = 0.0
+		self.camera_pose_msg.pose.orientation.y = 0.0
+		self.camera_pose_msg.pose.orientation.z = 0.0 #0.7071 
+		self.camera_pose_msg.pose.orientation.w = 0.0 #0.7071
 
 		self.br = CvBridge()
 		self.image_data = None
@@ -47,55 +69,103 @@ class ImageSubscriber(Node):
 
 		self.distortion_coefficients = np.array([[-5.90931946e-02,  2.30945178e+00,  1.13648731e-02 ,-9.87470154e-04 ,-9.38992815e+00]])
 
-		self.tag_length = 0.086
+		self.tag_length = 0.1485
+		self.tf_broadcaster = TransformBroadcaster(self)
 
 	def listener_callback(self, data):
 		#self.get_logger().info('Receiving video frame')    # for logging with timestamp
 		#print(data)
 		#np_arr = np.array(data.data, np.uint8)
 		#self.image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-		self.imgae_header = data.header.frame_id
+		self.image_header = data.header.frame_id
 		self.image_data = self.br.imgmsg_to_cv2(data)	
 		self.image_flag = True
-		self.main_process()
+		grayColor = cv2.cvtColor(self.image_data, cv2.COLOR_BGR2GRAY)
+		sharpen_kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+		sharpen = cv2.filter2D(grayColor, -1, sharpen_kernel)
+		lwr = np.array([0, 0, 100])
+		upr = np.array([179, 61, 252])
+		hsv = cv2.cvtColor(self.image_data, cv2.COLOR_BGR2HSV)
+		msk = cv2.inRange(hsv, lwr, upr)
+		krn = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+		dlt = cv2.dilate(msk, krn, iterations=1)
+		#res = 255 - cv2.bitwise_and(dlt, msk)
+		# res = np.uint8(res)
+		self.main_process(grayColor)
 		#cv2.imshow("camera", current_frame)
 		#cv2.waitKey(1)
-	def main_process(self):
+	def main_process(self,image):
 
 		#frame = self.image_data.copy()
 		#self.image_flag = False
-		image = cv2.cvtColor(self.image_data,cv2.COLOR_RGB2BGR)
+		#image = cv2.cvtColor(self.image_data,cv2.COLOR_RGB2BGR)
 		(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict,parameters=self.arucoParams)
-
+		tvec = None
+		rvec = None
 		if len(corners)>0:
 			for i in range(0, len(ids)):
             	# Estimate pose of each marker and return the values rvec and tvec---(different from those of camera coefficients)
 				rvec, tvec, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners[i], self.tag_length, self.matrix_coefficients,self.distortion_coefficients)
-            	# Draw a square around the markers
+				#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients,self.distortion_coefficients,tvec,rvec)
+	        	
+	        	# Draw a square around the markers
 				cv2.aruco.drawDetectedMarkers(image, corners) 
 
 				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
-				self.object_pose_msg.header.frame_id = self.image_header
-				self.object_pose_msg.pose.position.x = tvec[0]   #+ offset[ids[i]][0]
-				self.object_pose_msg.pose.position.y = tvec[1]   #+ offset[ids[i]][1]
-				self.object_pose_msg.pose.position.z = tvec[2]
- 				
-				rot_mat = cv2.Rodrigues(rvec)
-				euler_angles = rotationMatrixToEulerAngles(rot_mat)
+				self.object_pose_msg.header.frame_id = 'camera'
+				#print(tvec.shape)
+				object_pose_msg_tranform = TransformStamped()
+				object_pose_msg_tranform.header.stamp = self.get_clock().now().to_msg()
+				object_pose_msg_tranform.header.frame_id = 'tf_broadcaster_'
+				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
+				object_pose_msg_tranform.transform.translation.x = self.object_pose_msg.pose.position.x = float(tvec[0][0][0])   #+ offset[ids[i]][0]
+				object_pose_msg_tranform.transform.translation.y = self.object_pose_msg.pose.position.y = float(tvec[0][0][1])   #+ offset[ids[i]][1]
+				object_pose_msg_tranform.transform.translation.z = self.object_pose_msg.pose.position.z = float(tvec[0][0][2])
+				#print(rvec[i][0])
+				rot_mat = cv2.Rodrigues(rvec[0][0])
+				euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
 				p_quat = Quaternion()
-
-				p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
+				p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
+				p_quat.w = p_quat_raw[0]
+				p_quat.x = p_quat_raw[1]
+				p_quat.y = p_quat_raw[2]
+				p_quat.z = p_quat_raw[3]
+				#p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
 
 				self.object_pose_msg.pose.orientation = p_quat
 
-				self.object_pose.publish(object_pose_msg)
+				self.object_pose.publish(self.object_pose_msg)
 
+				#self.tf_broadcaster.sendTransform(object_pose_msg_tranform)
 				#use python transformation library to find the inverse transforms
 
-				#if ids[i] == 2:
-
+				transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
+				inv_transform = tf.inverse_matrix(transform)
+				camera_origin = tf.translation_from_matrix(inv_transform)
+				camera_quaternion = tf.quaternion_from_matrix(inv_transform)
+				#'sxyz'
+				q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)
+				q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
+				q_new = tf.unit_vector(q_new)
+				#q_new.normalize()
+				self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
+				self.camera_pose_msg.header.frame_id = 'world'
+				self.camera_pose_msg.pose.position.x = camera_origin[0]   
+				self.camera_pose_msg.pose.position.y = camera_origin[1]   
+				self.camera_pose_msg.pose.position.z = camera_origin[2]
+				self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
+				self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
+				self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
+				self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
+				#self.camera_pose_msg.pose.position = self.object_pose_msg.pose.position
+				if ids[i] == 3:
+					self.camera_pose.publish(self.camera_pose_msg)
+					print('marker',tvec)
+					print('camera',round(camera_origin[0],5),round(camera_origin[1],5) ,round(camera_origin[2],5))
+				
+				
 				#	print(tvec)
-            	# Draw Axis
+	        	# Draw Axis
 				cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
 
 		cv2.imshow("image", image)
