@@ -38,13 +38,17 @@ class ImageSubscriber(Node):
 		super().__init__('image_subscriber')   # subscriber node name
 		#self.subscription = self.create_subscription(CompressedImage, 'camera_image', self.listener_callback, 10)
 
-		self.subscription = self.create_subscription(Image, 'camera_image', self.listener_callback, 1)
-		self.subscription
+		#self.subscription = self.create_subscription(Image, 'camera_image', self.listener_callback, 1)
+		#self.subscription
 
-		self.object_pose = self.create_publisher(PoseStamped, '/vision/pose', 1)
+		self.object_pose = self.create_publisher(PoseStamped, '/vision/pose', 10)
 
-		self.camera_pose = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 1)
+		
 
+		self.camera_pose = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 10)
+
+		self.create_timer(1/30, self.callback)
+		
 		self.object_pose_msg = PoseStamped()
 		self.camera_pose_msg = PoseStamped()
 		self.imgae_header = 0
@@ -53,8 +57,8 @@ class ImageSubscriber(Node):
 		self.camera_pose_msg.pose.position.z = 0.0
 		self.camera_pose_msg.pose.orientation.x = 0.0
 		self.camera_pose_msg.pose.orientation.y = 0.0
-		self.camera_pose_msg.pose.orientation.z = 0.0 #0.7071 
-		self.camera_pose_msg.pose.orientation.w = 0.0 #0.7071
+		self.camera_pose_msg.pose.orientation.z = 0.7071 
+		self.camera_pose_msg.pose.orientation.w = 0.7071
 
 		self.br = CvBridge()
 		self.image_data = None
@@ -63,14 +67,29 @@ class ImageSubscriber(Node):
 		self.arucoDict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_250)
 		self.arucoParams = cv2.aruco.DetectorParameters_create()
 
-		self.matrix_coefficients = np.array([[1.41286392e+03, 0.00000000e+00 ,6.41248237e+02],
-                         [0.00000000e+00 ,1.41389251e+03, 4.26079102e+02],
-                         [0.00000000e+00, 0.00000000e+00 ,1.00000000e+00]])
+		self.matrix_coefficients = np.array([[1.26415545e+03, 0.00000000e+00, 6.14268000e+02],
+											 [0.00000000e+00, 1.26790106e+03, 5.07574844e+02],
+											 [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
 
-		self.distortion_coefficients = np.array([[-5.90931946e-02,  2.30945178e+00,  1.13648731e-02 ,-9.87470154e-04 ,-9.38992815e+00]])
+		self.distortion_coefficients = np.array([[ 0.24030483, -0.75567233,  0.00286373, -0.00462205, -0.65268243]])
 
 		self.tag_length = 0.1485
-		self.tf_broadcaster = TransformBroadcaster(self)
+		#self.tf_broadcaster = TransformBroadcaster(self)
+	def callback(self):
+
+		self.camera_pose_msg_tmp = PoseStamped()
+		self.camera_pose_msg_tmp.header.stamp = self.get_clock().now().to_msg()
+		self.camera_pose_msg_tmp.header.frame_id = 'world'
+		self.camera_pose_msg_tmp.pose.position.x = 0.0
+		self.camera_pose_msg_tmp.pose.position.y = 0.0
+		self.camera_pose_msg_tmp.pose.position.z = 1.0
+		q_rot = tf.quaternion_from_euler(0,0,-np.pi/2)
+		self.camera_pose_msg_tmp.pose.orientation.x = -q_rot[2]  # y value
+		self.camera_pose_msg_tmp.pose.orientation.y = -q_rot[1]  # x value
+		self.camera_pose_msg_tmp.pose.orientation.z = -q_rot[3]  # z value
+		self.camera_pose_msg_tmp.pose.orientation.w = q_rot[0]  # w value
+
+		self.camera_pose.publish(self.camera_pose_msg_tmp)
 
 	def listener_callback(self, data):
 		#self.get_logger().info('Receiving video frame')    # for logging with timestamp
@@ -114,19 +133,19 @@ class ImageSubscriber(Node):
 				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
 				self.object_pose_msg.header.frame_id = 'camera'
 				#print(tvec.shape)
-				object_pose_msg_tranform = TransformStamped()
-				object_pose_msg_tranform.header.stamp = self.get_clock().now().to_msg()
-				object_pose_msg_tranform.header.frame_id = 'tf_broadcaster_'
+				#object_pose_msg_tranform = TransformStamped()
+				#object_pose_msg_tranform.header.stamp = self.get_clock().now().to_msg()
+				#object_pose_msg_tranform.header.frame_id = 'tf_broadcaster_'
 				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
-				object_pose_msg_tranform.transform.translation.x = self.object_pose_msg.pose.position.x = float(tvec[0][0][0])   #+ offset[ids[i]][0]
-				object_pose_msg_tranform.transform.translation.y = self.object_pose_msg.pose.position.y = float(tvec[0][0][1])   #+ offset[ids[i]][1]
-				object_pose_msg_tranform.transform.translation.z = self.object_pose_msg.pose.position.z = float(tvec[0][0][2])
+				self.object_pose_msg.pose.position.x = float(tvec[0][0][0])   #+ offset[ids[i]][0]
+				self.object_pose_msg.pose.position.y = float(tvec[0][0][1])   #+ offset[ids[i]][1]
+				self.object_pose_msg.pose.position.z = float(tvec[0][0][2])
 				#print(rvec[i][0])
 				rot_mat = cv2.Rodrigues(rvec[0][0])
 				euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
 				p_quat = Quaternion()
 				p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
-				p_quat.w = p_quat_raw[0]
+				p_quat.w = p_quat_raw[0]		
 				p_quat.x = p_quat_raw[1]
 				p_quat.y = p_quat_raw[2]
 				p_quat.z = p_quat_raw[3]
@@ -146,7 +165,7 @@ class ImageSubscriber(Node):
 				#'sxyz'
 				q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)
 				q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
-				q_new = tf.unit_vector(q_new)
+				q_new = tf.unit_vector(q_rot)
 				#q_new.normalize()
 				self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
 				self.camera_pose_msg.header.frame_id = 'world'
@@ -167,6 +186,9 @@ class ImageSubscriber(Node):
 				#	print(tvec)
 	        	# Draw Axis
 				cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
+		else:
+
+			self.camera_pose.publish(self.camera_pose_msg)
 
 		cv2.imshow("image", image)
 		key = cv2.waitKey(1)
