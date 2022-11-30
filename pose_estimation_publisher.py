@@ -1,6 +1,10 @@
+<<<<<<< HEAD
 # hello there
 
 
+=======
+# abc
+>>>>>>> 24a677c (Added a comment)
 import rclpy
 from rclpy.node import Node
 import cv2
