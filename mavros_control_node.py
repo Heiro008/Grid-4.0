@@ -25,6 +25,13 @@ class control_node(Node):
 		self.rc = OverrideRCIn()
 		self.change_mode = self.create_client(SetMode, '/mavros/set_mode')
 
+		self.arm_service = self.create_client(CommandBool, '/mavros/cmd/arming')
+
+		while not self.arm_service.wait_for_service(timeout_sec=1.0):
+			self.get_logger().info('service not available, waiting again...')
+		resp = self.arm_service.call_async(True)
+		rclpy.spin_until_future_complete(self, resp)
+
 
 
 	def update_height(self, data):
@@ -43,8 +50,8 @@ class control_node(Node):
 			while not self.change_mode.wait_for_service(timeout_sec=1.0):
 				self.get_logger().info('service not available, waiting again...')
 			resp = self.change_mode.call_async(4)
-			rclpy.spin_until_future_complete(node, resp)
-
+			rclpy.spin_until_future_complete(self, resp)
+			self.get_logger().info('mode changed')
 
 		self.get_logger().info('published')
         self.override_pub.publish(self.rc)
