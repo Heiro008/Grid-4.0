@@ -1,19 +1,3 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
-# hello there
-
-
-=======
-# abc
->>>>>>> 24a677c (Added a comment)
-=======
-# abc
-=======
-# hello there
-
-
->>>>>>> 759f733 (temp commit)
->>>>>>> 7e88c4f (temp commit)
 import rclpy
 from rclpy.node import Node
 import cv2
