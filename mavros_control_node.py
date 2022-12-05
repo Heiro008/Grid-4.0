@@ -13,60 +13,86 @@ from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 from mavros_msgs.msg import OverrideRCIn
 from mavros import command
-from mavros import setpoint as SP
-
+from mavros_msgs.srv import CommandBool
+from mavros_msgs.srv import SetMode
+from mavros import setpoint as sp
+from rclpy.qos import QoSProfile
 
 class control_node(Node):
 	def __init__(self):
 		super().__init__('control_node')
 		self.override_pub = self.create_publisher(OverrideRCIn,"/mavros/rc/override",10)
-		self.local_position = self.create_subscription(PoseStamped, '/mavros/local_position/position', self.update_height, 1)
-		self.local_position
-		self.rc = OverrideRCIn()
-		self.change_mode = self.create_client(SetMode, '/mavros/set_mode')
 
+		#first arm and then give commands
+		#req = CommandBool()
 		self.arm_service = self.create_client(CommandBool, '/mavros/cmd/arming')
-
 		while not self.arm_service.wait_for_service(timeout_sec=1.0):
 			self.get_logger().info('service not available, waiting again...')
-		resp = self.arm_service.call_async(True)
+		req = CommandBool.Request()
+		req.value = True
+		resp = self.arm_service.call_async(req)
 		rclpy.spin_until_future_complete(self, resp)
 
+		qos_profile = QoSProfile(reliability=rclpy.qos.ReliabilityPolicy.BEST_EFFORT,
+                                          history=rclpy.qos.HistoryPolicy.KEEP_LAST,
+                                          depth=5)
+		self.local_position = self.create_subscription(PoseStamped, '/mavros/local_position/pose', self.update_height, qos_profile)
+		self.local_position
+		self.rc = OverrideRCIn()
+		self.flag = True
+		self.change_mode = self.create_client(SetMode, '/mavros/set_mode')
+		while not self.change_mode.wait_for_service(timeout_sec=1):
+			self.get_logger().info('service not available, waiting again...')
+		req = SetMode.Request()
+		req.custom_mode = 'GUIDED'
+		resp = self.change_mode.call_async(req)
+		print('done')
+		#rclpy.spin_until_future_complete(self, resp)
+		
 
 
 	def update_height(self, data):
 
 		local_position_msg = data
 		height = data.pose.position.z
-
+		print(height)
 		if height < 0.8:
-			self.rc.channels = [1500,1500,1550,1500,1200,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]
+			if self.flag:
+				self.rc.channels = [1500,1500,1590,1500,1100,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]
+			else:	
+				self.rc.channels = [1500,1500,1500,1500,1300,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]
+
 
 		else:
-			self.rc.channels = [1500,1500,1500,1500,1200,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]
-			self.get_logger().info('published')
-        	self.override_pub.publish(self.rc)
-
-			while not self.change_mode.wait_for_service(timeout_sec=1.0):
-				self.get_logger().info('service not available, waiting again...')
-			resp = self.change_mode.call_async(4)
-			rclpy.spin_until_future_complete(self, resp)
-			self.get_logger().info('mode changed')
+			self.rc.channels = [1500,1500,1500,1500,1300,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]
+			self.flag = False
+			if(self.flag):
+				self.override_pub.publish(self.rc)
+				#time.sleep(0.1)
+				while not self.change_mode.wait_for_service(timeout_sec=1):
+					self.get_logger().info('service not available, waiting again...')
+				req = SetMode.Request()
+				req.custom_mode = 'GUIDED'
+				resp = self.change_mode.call_async(req)
+				print('done')
+				#rclpy.spin_until_future_complete(self, resp)
+				self.get_logger().info('mode changed')
+				
 
 		self.get_logger().info('published')
-        self.override_pub.publish(self.rc)
-         # mode 0 = STABILIZE
-        # mode 4 = GUIDED
-        # mode 9 = LAND
+		self.override_pub.publish(self.rc)
+		# mode 0 = STABILIZE
+		# mode 4 = GUIDED
+		# mode 9 = LAND
 
 		
 
 def main(args=None):
 
     rclpy.init(args=args)
-    control_node = control_node()
-    rclpy.spin(control_node)
-    control_node.destroy_node()
+    control_node_ = control_node()
+    rclpy.spin(control_node_)
+    control_node_.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':

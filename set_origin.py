@@ -18,7 +18,7 @@ import time
 # Global position of the origin
 lat = 110200163  # Coimbatore
 lon = 770039725  # Coimbatore
-alt = 1339 
+alt = 0 
 
 
 def wait_conn():

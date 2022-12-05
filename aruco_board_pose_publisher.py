@@ -47,9 +47,9 @@ class ImageSubscriber(Node):
 		self.set_point = self.create_publisher(PoseStamped, '/mavros/setpoint_position/local', 1)
 
 		self.camera_pose = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 1)
-		################################################
-		#self.create_timer(1/30, self.callback)
-		################################################
+
+		self.create_timer(1/30, self.callback)
+		
 		self.object_pose_msg = PoseStamped()
 		self.camera_pose_msg = PoseStamped()
 		self.set_point_msg = PoseStamped()
@@ -79,7 +79,12 @@ class ImageSubscriber(Node):
 
 		self.distortion_coefficients = np.array([[ 0.24030483, -0.75567233,  0.00286373, -0.00462205, -0.65268243]])
 
-		self.tag_length = 0.1485
+		self.tag_length = 0.1485  # in metres, length of one marker on the board
+		self.tag_separation = 0.04   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
+		self.board = cv2.aruco.GridBoard_create(2, 2, self.tag_length, self.tag_separation, self.arucoDict)
+		        # first number = no. of columns of markers in the board
+		        # second number = no. of rows of markers in the board
+		
 		#self.tf_broadcaster = TransformBroadcaster(self)
 	def callback(self):
 
@@ -88,9 +93,9 @@ class ImageSubscriber(Node):
 		self.camera_pose_msg_tmp.header.frame_id = 'world'
 		self.camera_pose_msg_tmp.pose.position.x = 1.0
 		self.camera_pose_msg_tmp.pose.position.y = 0.0
-		self.camera_pose_msg_tmp.pose.position.z = 0.5
+		self.camera_pose_msg_tmp.pose.position.z = 1.0
 
-		transform = tf.compose_matrix(translate=[0.0,0.0,0.0],angles=[np.pi,0,0])  # update only the yaw angle 
+		transform = tf.compose_matrix(translate=[-1.0,1.0,1.0],angles=[np.pi,0,0])  # update only the yaw angle 
 		inv_transform = tf.inverse_matrix(transform)
 		camera_origin = tf.translation_from_matrix(inv_transform)
 		camera_quaternion = tf.quaternion_from_matrix(inv_transform)
@@ -134,80 +139,90 @@ class ImageSubscriber(Node):
 		self.main_process(grayColor)
 		#cv2.imshow("camera", current_frame)
 		#cv2.waitKey(1)
+		
 	def main_process(self,image):
 
 		#frame = self.image_data.copy()
 		#self.image_flag = False
 		#image = cv2.cvtColor(self.image_data,cv2.COLOR_RGB2BGR)
-		(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict,parameters=self.arucoParams)
+		(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict, parameters=self.arucoParams)
+		cv2.aruco.refineDetectedMarkers(image, self.board, corners, ids, rejected)  # not sure what this is for
+		       # maybe this above function can be applied only when the board alone is visible in frame?
+		       # i think not, but just check once to be sureee
+
 		tvec = None
 		rvec = None
-		if len(corners)>0:
-			for i in range(0, len(ids)):
-            	# Estimate pose of each marker and return the values rvec and tvec---(different from those of camera coefficients)
-				rvec, tvec, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners[i], self.tag_length, self.matrix_coefficients,self.distortion_coefficients)
-				#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients,self.distortion_coefficients,tvec,rvec)
+		if len(corners)>0 :   # or ids!=None
+		
+			ret_val, rvec, tvec = cv2.aruco.estimatePoseBoard(corners, ids, self.board, self.matrix_coefficients, self.distortion_coefficients)  
+			     # posture estimation from a diamond
+			     # i hope it works for gridboards as well?
+			 
+			#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients, self.distortion_coefficients, tvec, rvec)
 	        	
-	        	# Draw a square around the markers
-				cv2.aruco.drawDetectedMarkers(image, corners) 
+	        # Draw a square around the markers
+			cv2.aruco.drawDetectedMarkers(image, corners, ids, (0,255,0))  # what colour is this ?
 
-				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
-				self.object_pose_msg.header.frame_id = 'camera'
-				#print(tvec.shape)
-				#object_pose_msg_tranform = TransformStamped()
-				#object_pose_msg_tranform.header.stamp = self.get_clock().now().to_msg()
-				#object_pose_msg_tranform.header.frame_id = 'tf_broadcaster_'
-				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
-				self.object_pose_msg.pose.position.x = float(tvec[0][0][0])   #+ offset[ids[i]][0]
-				self.object_pose_msg.pose.position.y = float(tvec[0][0][1])   #+ offset[ids[i]][1]
-				self.object_pose_msg.pose.position.z = float(tvec[0][0][2])
-				#print(rvec[i][0])
-				rot_mat = cv2.Rodrigues(rvec[0][0])
-				euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
-				p_quat = Quaternion()
-				p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
-				p_quat.w = p_quat_raw[0]		
-				p_quat.x = p_quat_raw[1]
-				p_quat.y = p_quat_raw[2]
-				p_quat.z = p_quat_raw[3]
-				#p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
+			self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
+			self.object_pose_msg.header.frame_id = 'camera'
+			#print(tvec.shape)
+			#object_pose_msg_tranform = TransformStamped()
+			#object_pose_msg_tranform.header.stamp = self.get_clock().now().to_msg()
+			#object_pose_msg_tranform.header.frame_id = 'tf_broadcaster_'
+			self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
+			self.object_pose_msg.pose.position.x = float(tvec[0][0][0])   #+ offset[ids[i]][0]
+			self.object_pose_msg.pose.position.y = float(tvec[0][0][1])   #+ offset[ids[i]][1]
+			self.object_pose_msg.pose.position.z = float(tvec[0][0][2])
+			#print(rvec[i][0])
+			rot_mat = cv2.Rodrigues(rvec[0][0])
+			euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
+			p_quat = Quaternion()
+			p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
+			p_quat.w = p_quat_raw[0]		
+			p_quat.x = p_quat_raw[1]
+			p_quat.y = p_quat_raw[2]
+			p_quat.z = p_quat_raw[3]
+			#p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
 
-				self.object_pose_msg.pose.orientation = p_quat
+			self.object_pose_msg.pose.orientation = p_quat
 
-				self.object_pose.publish(self.object_pose_msg)
+			self.object_pose.publish(self.object_pose_msg)
 
-				#self.tf_broadcaster.sendTransform(object_pose_msg_tranform)
-				#use python transformation library to find the inverse transforms
+			#self.tf_broadcaster.sendTransform(object_pose_msg_tranform)
+			#use python transformation library to find the inverse transforms
 
-				transform = tf.compose_matrix(translate=tvec,angles=[np.pi,0,euler_angles[2]])
-				inv_transform = tf.inverse_matrix(transform)
-				camera_origin = tf.translation_from_matrix(inv_transform)
-				camera_quaternion = tf.quaternion_from_matrix(inv_transform)
-				#'sxyz'
-				q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)
-				q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
-				q_new = tf.unit_vector(q_new)
-				#q_new.normalize()
-				self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
-				self.camera_pose_msg.header.frame_id = 'world'
-				self.camera_pose_msg.pose.position.x = camera_origin[0]   
-				self.camera_pose_msg.pose.position.y = camera_origin[1]   
-				self.camera_pose_msg.pose.position.z = camera_origin[2]
-				self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
-				self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
-				self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
-				self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
-				#self.camera_pose_msg.pose.position = self.object_pose_msg.pose.position
-				if ids[i] == 3:
-					self.camera_pose.publish(self.camera_pose_msg)
-					#self.set_point.publish(self.set_point_msg)
-					#print('marker',tvec)
-					#print('camera',round(camera_origin[0],5),round(camera_origin[1],5) ,round(camera_origin[2],5))
-				
-				
-				#	print(tvec)
-	        	# Draw Axis
-				cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
+			transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
+			inv_transform = tf.inverse_matrix(transform)
+			camera_origin = tf.translation_from_matrix(inv_transform)
+			camera_quaternion = tf.quaternion_from_matrix(inv_transform)
+			#'sxyz'
+			q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)
+			q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
+			q_new = tf.unit_vector(q_new)
+			#q_new.normalize()
+			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
+			self.camera_pose_msg.header.frame_id = 'world'
+			self.camera_pose_msg.pose.position.x = camera_origin[0]   
+			self.camera_pose_msg.pose.position.y = camera_origin[1]   
+			self.camera_pose_msg.pose.position.z = camera_origin[2]
+			self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
+			self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
+			self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
+			self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
+			#self.camera_pose_msg.pose.position = self.object_pose_msg.pose.position
+			
+			
+			# ------ THIS PART NEEDS EDITING ------ #
+			for i in ids:
+				if i == 3:
+			    	self.camera_pose.publish(self.camera_pose_msg)
+			    	print('marker',tvec)
+			    	print('camera',round(camera_origin[0],5),round(camera_origin[1],5) ,round(camera_origin[2],5))
+			# ------------------------------------ #
+			
+			#  print(tvec)
+        	# Draw Axis
+			cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
 		else:
 
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
