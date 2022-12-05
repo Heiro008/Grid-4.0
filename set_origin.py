@@ -37,7 +37,7 @@ def wait_conn():
         time.sleep(0.5)
 
 
-master = mavutil.mavlink_connection('udpout:192.168.216.218:14552')
+master = mavutil.mavlink_connection('udpout:192.168.216.218:14590')
 #master = mavutil.mavlink_connection("/dev/ttyACM0", baud=115200)
 print('waiting')
 #master.wait_heartbeat()
@@ -83,7 +83,7 @@ def set_global_origin(mav, pub):
 
     master.mav.set_gps_global_origin_send(target_system,
             lattitude, 
-            longitude,
+            longitude,  
             altitude)
     print('sent origin')
 
