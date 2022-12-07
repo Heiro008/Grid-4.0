@@ -16,6 +16,8 @@ class Image_publisher(Node):
 
 		#self.cap = VideoStream(0,resolution=(720,1280),framerate=30).start()
 		self.cap = cv2.VideoCapture("rtsp://192.168.216.218:8554/test/?tcp")
+		#self.cap = cv2.VideoCapture(0)    # -- for using laptop camera
+		
 		self.br = CvBridge()
 		#self.cap.set(cv2.CAP_PROP_FOURCC, 0x47504A4D)
 		#self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)

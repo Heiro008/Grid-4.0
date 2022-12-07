@@ -155,12 +155,13 @@ class ImageSubscriber(Node):
 		if len(corners)>0 :   # or ids!=None
 		
 			ret_val, rvec, tvec = cv2.aruco.estimatePoseBoard(corners, ids, self.board, self.matrix_coefficients, self.distortion_coefficients,tvec,rvec)  
-			     # posture estimation from a diamond
-			     # i hope it works for gridboards as well?
+				# posture estimation from a diamond
+				# i hope it works for gridboards as well?
 
 			#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients, self.distortion_coefficients, tvec, rvec)
+		if rvec!=None and tvec!=None:
 	        	
-	        # Draw a square around the markers
+			# Draw a square around the markers
 			cv2.aruco.drawDetectedMarkers(image, corners, ids, (0,255,0))  # what colour is this ?
 
 			self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
@@ -230,7 +231,8 @@ class ImageSubscriber(Node):
 			self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
 			self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
 			#self.camera_pose_msg.pose.position = self.object_pose_msg.pose.position
-			
+			#print('OBJECT position:', tvec)
+			#print('CAMERA position:', camera_origin)
 			
 			# ------ THIS PART NEEDS EDITING ------ #
 			for i in ids:
@@ -239,7 +241,7 @@ class ImageSubscriber(Node):
 					#print('marker',tvec)
 					#print(rvec)
 					#print(euler_angles)
-					#print('camera',round(camera_origin[0],5),round(camera_origin[1],5) ,round(camera_origin[2],5))
+					#print('camera',round(camera_origin[0],5), round(camera_origin[1],5), round(camera_origin[2], 5))
 			# ------------------------------------ #
 			
 			#  print(tvec)
@@ -250,6 +252,7 @@ class ImageSubscriber(Node):
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
 			self.camera_pose_msg.header.frame_id = 'map'
 			self.camera_pose.publish(self.camera_pose_msg)
+			#print("CAMERA position: ", self.camera_pose_msg)
 
 		cv2.imshow("image", image)
 		key = cv2.waitKey(1)
