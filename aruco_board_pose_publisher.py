@@ -159,94 +159,94 @@ class ImageSubscriber(Node):
 				# i hope it works for gridboards as well?
 
 			#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients, self.distortion_coefficients, tvec, rvec)
-		if rvec!=None and tvec!=None:
-	        	
-			# Draw a square around the markers
-			cv2.aruco.drawDetectedMarkers(image, corners, ids, (0,255,0))  # what colour is this ?
+			if ret_val>0:
+		        	
+				# Draw a square around the markers
+				cv2.aruco.drawDetectedMarkers(image, corners, ids, (0,255,0))  # what colour is this ?
 
-			self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
-			self.object_pose_msg.header.frame_id = 'camera'
-			#print(tvec.shape)
-			#object_pose_msg_tranform = TransformStamped()
-			#object_pose_msg_tranform.header.stamp = self.get_clock().now().to_msg()
-			#object_pose_msg_tranform.header.frame_id = 'tf_broadcaster_'
-			#print(tvec)
-			self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
-			self.object_pose_msg.pose.position.x = float(tvec[0][0])   #+ offset[ids[i]][0]
-			self.object_pose_msg.pose.position.y = float(tvec[1][0])   #+ offset[ids[i]][1]
-			self.object_pose_msg.pose.position.z = float(tvec[2][0])
-			#print(rvec[i][0])
-			rvec = rvec.reshape(1,1,3)
-			tvec = tvec.reshape(1,1,3)
+				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
+				self.object_pose_msg.header.frame_id = 'camera'
+				#print(tvec.shape)
+				#object_pose_msg_tranform = TransformStamped()
+				#object_pose_msg_tranform.header.stamp = self.get_clock().now().to_msg()
+				#object_pose_msg_tranform.header.frame_id = 'tf_broadcaster_'
+				#print(tvec)
+				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
+				self.object_pose_msg.pose.position.x = float(tvec[0][0])   #+ offset[ids[i]][0]
+				self.object_pose_msg.pose.position.y = float(tvec[1][0])   #+ offset[ids[i]][1]
+				self.object_pose_msg.pose.position.z = float(tvec[2][0])
+				#print(rvec[i][0])
+				rvec = rvec.reshape(1,1,3)
+				tvec = tvec.reshape(1,1,3)
 
-			cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
+				cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
 
-			#tvec[0][0][1] = -tvec[0][0][1]
-			#tvec[0][0][2] = -tvec[0][0][2]
-			#tmp = rvec[0][0][0]
-			#rvec[0][0][0] = rvec[0][0][1]
-			#rvec[0][0][1] = -tmp
-			#rvec[0][0][0] = -rvec[0][0][0] - np.pi
+				#tvec[0][0][1] = -tvec[0][0][1]
+				#tvec[0][0][2] = -tvec[0][0][2]
+				#tmp = rvec[0][0][0]
+				#rvec[0][0][0] = rvec[0][0][1]
+				#rvec[0][0][1] = -tmp
+				#rvec[0][0][0] = -rvec[0][0][0] - np.pi
 
 
-			#print(rvec)
-			rot_mat = cv2.Rodrigues(rvec)
-			euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
-			p_quat = Quaternion()
-			if euler_angles[0] > 0:
-				euler_angles[0] = euler_angles[0] - np.pi
-			else:
-				euler_angles[0] = euler_angles[0] + np.pi
-			p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
-			p_quat.w = p_quat_raw[0]		
-			p_quat.x = p_quat_raw[1]
-			p_quat.y = p_quat_raw[2]
-			p_quat.z = p_quat_raw[3]
-			#p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
+				#print(rvec)
+				rot_mat = cv2.Rodrigues(rvec)
+				euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
+				p_quat = Quaternion()
+				if euler_angles[0] > 0:
+					euler_angles[0] = euler_angles[0] - np.pi
+				else:
+					euler_angles[0] = euler_angles[0] + np.pi
+				p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
+				p_quat.w = p_quat_raw[0]		
+				p_quat.x = p_quat_raw[1]
+				p_quat.y = p_quat_raw[2]
+				p_quat.z = p_quat_raw[3]
+				#p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
 
-			self.object_pose_msg.pose.orientation = p_quat
+				self.object_pose_msg.pose.orientation = p_quat
 
-			self.object_pose.publish(self.object_pose_msg)
+				self.object_pose.publish(self.object_pose_msg)
 
-			#self.tf_broadcaster.sendTransform(object_pose_msg_tranform)
-			#use python transformation library to find the inverse transforms
+				#self.tf_broadcaster.sendTransform(object_pose_msg_tranform)
+				#use python transformation library to find the inverse transforms
 
-			#print(tvec)
-			transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
-			inv_transform = tf.inverse_matrix(transform)
-			camera_origin = tf.translation_from_matrix(inv_transform)
-			camera_quaternion = tf.quaternion_from_matrix(inv_transform)
-			#'sxyz'
-			q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)	
-			q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
-			q_new = tf.unit_vector(q_new)
-			#q_new.normalize()
-			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
-			self.camera_pose_msg.header.frame_id = 'map'
-			self.camera_pose_msg.pose.position.x = camera_origin[0]  
-			self.camera_pose_msg.pose.position.y = camera_origin[1]
-			self.camera_pose_msg.pose.position.z = camera_origin[2]
-			self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
-			self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
-			self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
-			self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
-			#self.camera_pose_msg.pose.position = self.object_pose_msg.pose.position
-			#print('OBJECT position:', tvec)
-			#print('CAMERA position:', camera_origin)
-			
-			# ------ THIS PART NEEDS EDITING ------ #
-			for i in ids:
-				if i == 3:
-					self.camera_pose.publish(self.camera_pose_msg)
-					#print('marker',tvec)
-					#print(rvec)
-					#print(euler_angles)
-					#print('camera',round(camera_origin[0],5), round(camera_origin[1],5), round(camera_origin[2], 5))
-			# ------------------------------------ #
-			
-			#  print(tvec)
-        	# Draw Axis
-			
+				#print(tvec)
+				transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
+				inv_transform = tf.inverse_matrix(transform)
+				camera_origin = tf.translation_from_matrix(inv_transform)
+				camera_quaternion = tf.quaternion_from_matrix(inv_transform)
+				#'sxyz'
+				q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)	
+				q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
+				q_new = tf.unit_vector(q_new)
+				#q_new.normalize()
+				self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
+				self.camera_pose_msg.header.frame_id = 'map'
+				self.camera_pose_msg.pose.position.x = camera_origin[0]  
+				self.camera_pose_msg.pose.position.y = camera_origin[1]
+				self.camera_pose_msg.pose.position.z = camera_origin[2]
+				self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
+				self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
+				self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
+				self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
+				#self.camera_pose_msg.pose.position = self.object_pose_msg.pose.position
+				#print('OBJECT position:', tvec)
+				#print('CAMERA position:', camera_origin)
+				
+				# ------ THIS PART NEEDS EDITING ------ #
+				for i in ids:
+					if i == 3:
+						self.camera_pose.publish(self.camera_pose_msg)
+						#print('marker',tvec)
+						#print(rvec)
+						#print(euler_angles)
+						#print('camera',round(camera_origin[0],5), round(camera_origin[1],5), round(camera_origin[2], 5))
+				# ------------------------------------ #
+				
+				#  print(tvec)
+	        	# Draw Axis
+				
 		else:
 
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
