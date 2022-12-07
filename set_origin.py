@@ -139,11 +139,6 @@ def set_home_position(mav, pub):
     #send_message(msg, mav, pub)
 
 
-def dis():
-    #MAV_DISTANCE_SENSOR_ULTRASOUND    1
-    #MAV_SENSOR_ROTATION_PITCH_270   25
-    #
-    master.mav.distance_sensor_send(time.time(),0,200,distance,1,0,25,255)
 class set_origin(Node):
     def __init__(self):
         super().__init__('origin_publisher')
@@ -161,6 +156,7 @@ class set_origin(Node):
             set_home_position(self.mav, self.mavlink_pub)
 
 f = fifo()
+
 mav = MAV_APM.MAVLink(f, srcSystem=1, srcComponent=1)
 
 if __name__=="__main__":
