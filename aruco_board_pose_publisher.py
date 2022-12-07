@@ -39,7 +39,7 @@ class ImageSubscriber(Node):
 		super().__init__('image_subscriber')   # subscriber node name
 		#self.subscription = self.create_subscription(CompressedImage, 'camera_image', self.listener_callback, 10)
 
-		self.subscription = self.create_subscription(Image, 'camera_image', self.listener_callback, 1)
+		self.subscription = self.create_subscription(Image, 'image_raw', self.listener_callback, 1)
 		self.subscription
 
 		self.object_pose = self.create_publisher(PoseStamped, '/vision/pose', 1)

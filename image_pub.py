@@ -15,9 +15,14 @@ class Image_publisher(Node):
 		self.publisher = self.create_publisher(Image,'camera_image',10)
 
 		#self.cap = VideoStream(0,resolution=(720,1280),framerate=30).start()
+<<<<<<< HEAD
 		self.cap = cv2.VideoCapture("rtsp://192.168.216.218:8554/test/?tcp")
 		#self.cap = cv2.VideoCapture(0)    # -- for using laptop camera
 		
+=======
+		self.cap = cv2.VideoCapture("rtsp://192.168.216.218:8554/test/")
+		self.cap.set(cv2.CAP_PROP_FPS, 60)
+>>>>>>> a665fb9 (	modified:   aruco_board_pose_publisher.py)
 		self.br = CvBridge()
 		#self.cap.set(cv2.CAP_PROP_FOURCC, 0x47504A4D)
 		#self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
@@ -35,9 +40,9 @@ class Image_publisher(Node):
 				image = self.br.cv2_to_imgmsg(frame,encoding="rgb8")
 				self.publisher.publish(image)
 				#time.sleep(0.02)
-				#cv2.imshow('tmp',frame)
-				#if cv2.waitKey(1) == 27:
-				#	break
+				cv2.imshow('tmp',frame)
+				if cv2.waitKey(1) == 27:
+					break
 			
 		self.cap.release()
 		cv2.destroyAllWindows()
