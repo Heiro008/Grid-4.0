@@ -83,7 +83,7 @@ class control_node(Node):
 
 		local_position_msg = data
 		height = data.pose.position.z
-		print(data.pose.position)
+		print(round(data.pose.position.x,5),round(data.pose.position.y,5),round(data.pose.position.z,5))
 		# if height < 0.8:
 		# 	if self.flag:
 		# 		self.rc.channels = [1500,1500,1590,1500,1100,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]

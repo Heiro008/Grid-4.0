@@ -48,7 +48,7 @@ class ImageSubscriber(Node):
 
 		self.camera_pose = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 1)
 
-		self.create_timer(1/30, self.callback)
+		#self.create_timer(1/30, self.callback)
 		
 		self.object_pose_msg = PoseStamped()
 		self.camera_pose_msg = PoseStamped()
@@ -79,8 +79,8 @@ class ImageSubscriber(Node):
 
 		self.distortion_coefficients = np.array([[ 0.24030483, -0.75567233,  0.00286373, -0.00462205, -0.65268243]])
 
-		self.tag_length = 0.1485  # in metres, length of one marker on the board
-		self.tag_separation = 0.04   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
+		self.tag_length = 0.07  # in metres, length of one marker on the board
+		self.tag_separation = 0.007   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
 		self.board = cv2.aruco.GridBoard_create(2, 2, self.tag_length, self.tag_separation, self.arucoDict)
 		        # first number = no. of columns of markers in the board
 		        # second number = no. of rows of markers in the board
@@ -154,10 +154,10 @@ class ImageSubscriber(Node):
 		rvec = None
 		if len(corners)>0 :   # or ids!=None
 		
-			ret_val, rvec, tvec = cv2.aruco.estimatePoseBoard(corners, ids, self.board, self.matrix_coefficients, self.distortion_coefficients)  
+			ret_val, rvec, tvec = cv2.aruco.estimatePoseBoard(corners, ids, self.board, self.matrix_coefficients, self.distortion_coefficients,tvec,rvec)  
 			     # posture estimation from a diamond
 			     # i hope it works for gridboards as well?
-			 
+
 			#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients, self.distortion_coefficients, tvec, rvec)
 	        	
 	        # Draw a square around the markers
@@ -169,14 +169,33 @@ class ImageSubscriber(Node):
 			#object_pose_msg_tranform = TransformStamped()
 			#object_pose_msg_tranform.header.stamp = self.get_clock().now().to_msg()
 			#object_pose_msg_tranform.header.frame_id = 'tf_broadcaster_'
+			#print(tvec)
 			self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
-			self.object_pose_msg.pose.position.x = float(tvec[0][0][0])   #+ offset[ids[i]][0]
-			self.object_pose_msg.pose.position.y = float(tvec[0][0][1])   #+ offset[ids[i]][1]
-			self.object_pose_msg.pose.position.z = float(tvec[0][0][2])
+			self.object_pose_msg.pose.position.x = float(tvec[0][0])   #+ offset[ids[i]][0]
+			self.object_pose_msg.pose.position.y = float(tvec[1][0])   #+ offset[ids[i]][1]
+			self.object_pose_msg.pose.position.z = float(tvec[2][0])
 			#print(rvec[i][0])
-			rot_mat = cv2.Rodrigues(rvec[0][0])
+			rvec = rvec.reshape(1,1,3)
+			tvec = tvec.reshape(1,1,3)
+
+			cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
+
+			#tvec[0][0][1] = -tvec[0][0][1]
+			#tvec[0][0][2] = -tvec[0][0][2]
+			#tmp = rvec[0][0][0]
+			#rvec[0][0][0] = rvec[0][0][1]
+			#rvec[0][0][1] = -tmp
+			#rvec[0][0][0] = -rvec[0][0][0] - np.pi
+
+
+			#print(rvec)
+			rot_mat = cv2.Rodrigues(rvec)
 			euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
 			p_quat = Quaternion()
+			if euler_angles[0] > 0:
+				euler_angles[0] = euler_angles[0] - np.pi
+			else:
+				euler_angles[0] = euler_angles[0] + np.pi
 			p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
 			p_quat.w = p_quat_raw[0]		
 			p_quat.x = p_quat_raw[1]
@@ -191,19 +210,20 @@ class ImageSubscriber(Node):
 			#self.tf_broadcaster.sendTransform(object_pose_msg_tranform)
 			#use python transformation library to find the inverse transforms
 
+			#print(tvec)
 			transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
 			inv_transform = tf.inverse_matrix(transform)
 			camera_origin = tf.translation_from_matrix(inv_transform)
 			camera_quaternion = tf.quaternion_from_matrix(inv_transform)
 			#'sxyz'
-			q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)
+			q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)	
 			q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
 			q_new = tf.unit_vector(q_new)
 			#q_new.normalize()
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
-			self.camera_pose_msg.header.frame_id = 'world'
-			self.camera_pose_msg.pose.position.x = camera_origin[0]   
-			self.camera_pose_msg.pose.position.y = camera_origin[1]   
+			self.camera_pose_msg.header.frame_id = 'map'
+			self.camera_pose_msg.pose.position.x = camera_origin[0]  
+			self.camera_pose_msg.pose.position.y = camera_origin[1]
 			self.camera_pose_msg.pose.position.z = camera_origin[2]
 			self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
 			self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
@@ -215,18 +235,20 @@ class ImageSubscriber(Node):
 			# ------ THIS PART NEEDS EDITING ------ #
 			for i in ids:
 				if i == 3:
-			    	self.camera_pose.publish(self.camera_pose_msg)
-			    	print('marker',tvec)
-			    	print('camera',round(camera_origin[0],5),round(camera_origin[1],5) ,round(camera_origin[2],5))
+					self.camera_pose.publish(self.camera_pose_msg)
+					#print('marker',tvec)
+					#print(rvec)
+					#print(euler_angles)
+					#print('camera',round(camera_origin[0],5),round(camera_origin[1],5) ,round(camera_origin[2],5))
 			# ------------------------------------ #
 			
 			#  print(tvec)
         	# Draw Axis
-			cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
+			
 		else:
 
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
-			self.camera_pose_msg.header.frame_id = 'world'
+			self.camera_pose_msg.header.frame_id = 'map'
 			self.camera_pose.publish(self.camera_pose_msg)
 
 		cv2.imshow("image", image)

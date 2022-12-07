@@ -46,7 +46,7 @@ class ImageSubscriber(Node):
 
 		self.set_point = self.create_publisher(PoseStamped, '/mavros/setpoint_position/local', 1)
 
-		self.camera_pose = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 1)
+		self.camera_pose = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 10)
 		################################################
 		#self.create_timer(1/30, self.callback)
 		################################################
@@ -85,7 +85,7 @@ class ImageSubscriber(Node):
 
 		self.camera_pose_msg_tmp = PoseStamped()
 		self.camera_pose_msg_tmp.header.stamp = self.get_clock().now().to_msg()
-		self.camera_pose_msg_tmp.header.frame_id = 'world'
+		self.camera_pose_msg_tmp.header.frame_id = 'map'
 		self.camera_pose_msg_tmp.pose.position.x = 1.0
 		self.camera_pose_msg_tmp.pose.position.y = 0.0
 		self.camera_pose_msg_tmp.pose.position.z = 0.5
@@ -131,7 +131,7 @@ class ImageSubscriber(Node):
 		dlt = cv2.dilate(msk, krn, iterations=1)
 		#res = 255 - cv2.bitwise_and(dlt, msk)
 		# res = np.uint8(res)
-		self.main_process(grayColor)
+		self.main_process(self.image_data)
 		#cv2.imshow("camera", current_frame)
 		#cv2.waitKey(1)
 	def main_process(self,image):
@@ -178,8 +178,9 @@ class ImageSubscriber(Node):
 
 				#self.tf_broadcaster.sendTransform(object_pose_msg_tranform)
 				#use python transformation library to find the inverse transforms
-
-				transform = tf.compose_matrix(translate=tvec,angles=[np.pi,0,euler_angles[2]])
+				#print(type(tvec))
+				#print(rvec)
+				transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
 				inv_transform = tf.inverse_matrix(transform)
 				camera_origin = tf.translation_from_matrix(inv_transform)
 				camera_quaternion = tf.quaternion_from_matrix(inv_transform)
@@ -189,7 +190,7 @@ class ImageSubscriber(Node):
 				q_new = tf.unit_vector(q_new)
 				#q_new.normalize()
 				self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
-				self.camera_pose_msg.header.frame_id = 'world'
+				self.camera_pose_msg.header.frame_id = 'map'
 				self.camera_pose_msg.pose.position.x = camera_origin[0]   
 				self.camera_pose_msg.pose.position.y = camera_origin[1]   
 				self.camera_pose_msg.pose.position.z = camera_origin[2]
@@ -202,6 +203,8 @@ class ImageSubscriber(Node):
 					self.camera_pose.publish(self.camera_pose_msg)
 					#self.set_point.publish(self.set_point_msg)
 					#print('marker',tvec)
+					#print(rvec)
+					print(euler_angles)
 					#print('camera',round(camera_origin[0],5),round(camera_origin[1],5) ,round(camera_origin[2],5))
 				
 				
@@ -211,7 +214,7 @@ class ImageSubscriber(Node):
 		else:
 
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
-			self.camera_pose_msg.header.frame_id = 'world'
+			self.camera_pose_msg.header.frame_id = 'map'
 			self.camera_pose.publish(self.camera_pose_msg)
 
 		cv2.imshow("image", image)
