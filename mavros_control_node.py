@@ -22,7 +22,7 @@ from rclpy.qos import QoSProfile
 class control_node(Node):
 	def __init__(self):
 		super().__init__('control_node')
-		self.override_pub = self.create_publisher(OverrideRCIn,"/mavros/rc/override",10)
+		#self.override_pub = self.create_publisher(OverrideRCIn,"/mavros/rc/override",10)
 
 		qos_profile = QoSProfile(reliability=rclpy.qos.ReliabilityPolicy.BEST_EFFORT,
                                           history=rclpy.qos.HistoryPolicy.KEEP_LAST,
@@ -62,12 +62,12 @@ class control_node(Node):
 		while not self.takeoff.wait_for_service(timeout_sec=1):
 			self.get_logger().info('service not available, waiting again...')
 		req = CommandTOL.Request()
-		req.altitude = 0.8
+		req.altitude = 0.7
 		resp = self.takeoff.call_async(req)
 		rclpy.spin_until_future_complete(self, resp)
 		print('takeoff')
 
-		time.sleep(10)
+		time.sleep(20)
 
 		while not self.change_mode.wait_for_service(timeout_sec=1):
 			self.get_logger().info('service not available, waiting again...')

@@ -55,7 +55,7 @@ class ImageSubscriber(Node):
 		self.set_point_msg = PoseStamped()
 		self.imgae_header = 0
 		self.camera_pose_msg.pose.position.x = 0.0
-		self.camera_pose_msg.pose.position.y = 0.0
+		self.camera_pose_msg.pose.position.y = 0.1
 		self.camera_pose_msg.pose.position.z = 0.0
 		self.camera_pose_msg.pose.orientation.x = 0.0
 		self.camera_pose_msg.pose.orientation.y = 0.0
