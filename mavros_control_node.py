@@ -62,7 +62,7 @@ class control_node(Node):
 		while not self.takeoff.wait_for_service(timeout_sec=1):
 			self.get_logger().info('service not available, waiting again...')
 		req = CommandTOL.Request()
-		req.altitude = 0.7
+		req.altitude = 0.5
 		resp = self.takeoff.call_async(req)
 		rclpy.spin_until_future_complete(self, resp)
 		print('takeoff')

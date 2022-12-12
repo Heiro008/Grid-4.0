@@ -11,7 +11,7 @@ from geometry_msgs.msg import Quaternion
 import transformations as tf
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
-
+from std_msgs.msg import Float32
 
 def isRotationMatrix(R):
 	Rt = np.transpose(R)
@@ -41,6 +41,8 @@ class ImageSubscriber(Node):
 
 		self.subscription = self.create_subscription(Image, 'image_raw', self.listener_callback, 1)
 		self.subscription
+		self.range_finder = self.create_subscription(Float32,'/range_finder/ultrasonic', self.update_height, 10)
+		self.range_finder
 
 		self.object_pose = self.create_publisher(PoseStamped, '/vision/pose', 1)
 
@@ -49,13 +51,13 @@ class ImageSubscriber(Node):
 		self.camera_pose = self.create_publisher(PoseStamped, '/mavros/vision_pose/pose', 1)
 
 		#self.create_timer(1/30, self.callback)
-		
+		self.height = 0
 		self.object_pose_msg = PoseStamped()
 		self.camera_pose_msg = PoseStamped()
 		self.set_point_msg = PoseStamped()
 		self.imgae_header = 0
-		self.camera_pose_msg.pose.position.x = 0.0
-		self.camera_pose_msg.pose.position.y = 0.1
+		self.camera_pose_msg.pose.position.x = 0.1
+		self.camera_pose_msg.pose.position.y = -0.15
 		self.camera_pose_msg.pose.position.z = 0.0
 		self.camera_pose_msg.pose.orientation.x = 0.0
 		self.camera_pose_msg.pose.orientation.y = 0.0
@@ -79,13 +81,17 @@ class ImageSubscriber(Node):
 
 		self.distortion_coefficients = np.array([[ 0.24030483, -0.75567233,  0.00286373, -0.00462205, -0.65268243]])
 
-		self.tag_length = 0.07  # in metres, length of one marker on the board
-		self.tag_separation = 0.007   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
-		self.board = cv2.aruco.GridBoard_create(2, 2, self.tag_length, self.tag_separation, self.arucoDict)
+		self.tag_length = 0.048  # in metres, length of one marker on the board
+		self.tag_separation = 0.005   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
+		self.board = cv2.aruco.GridBoard_create(3, 4, self.tag_length, self.tag_separation, self.arucoDict)
 		        # first number = no. of columns of markers in the board
 		        # second number = no. of rows of markers in the board
 		
 		#self.tf_broadcaster = TransformBroadcaster(self)
+	def update_height(self,data):
+		self.height = float(data.data/100)
+		#print(self.height)
+
 	def callback(self):
 
 		self.camera_pose_msg_tmp = PoseStamped()
@@ -123,7 +129,8 @@ class ImageSubscriber(Node):
 		#np_arr = np.array(data.data, np.uint8)
 		#self.image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 		self.image_header = data.header.frame_id
-		self.image_data = self.br.imgmsg_to_cv2(data)	
+		self.image_data = self.br.imgmsg_to_cv2(data)
+		self.image_data = cv2.cvtColor(self.image_data, cv2.COLOR_RGB2BGR)
 		self.image_flag = True
 		grayColor = cv2.cvtColor(self.image_data, cv2.COLOR_BGR2GRAY)
 		sharpen_kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
@@ -136,7 +143,7 @@ class ImageSubscriber(Node):
 		dlt = cv2.dilate(msk, krn, iterations=1)
 		#res = 255 - cv2.bitwise_and(dlt, msk)
 		# res = np.uint8(res)
-		self.main_process(grayColor)
+		self.main_process(self.image_data)
 		#cv2.imshow("camera", current_frame)
 		#cv2.waitKey(1)
 		
@@ -225,7 +232,8 @@ class ImageSubscriber(Node):
 				self.camera_pose_msg.header.frame_id = 'map'
 				self.camera_pose_msg.pose.position.x = camera_origin[0]  
 				self.camera_pose_msg.pose.position.y = camera_origin[1]
-				self.camera_pose_msg.pose.position.z = camera_origin[2]
+				#feeding the range_finder value to the z position
+				self.camera_pose_msg.pose.position.z = float(self.height)     #camera_origin[2]
 				self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
 				self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
 				self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
@@ -251,6 +259,7 @@ class ImageSubscriber(Node):
 
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
 			self.camera_pose_msg.header.frame_id = 'map'
+			self.camera_pose_msg.pose.position.z = float(self.height)
 			self.camera_pose.publish(self.camera_pose_msg)
 			#print("CAMERA position: ", self.camera_pose_msg)
 
