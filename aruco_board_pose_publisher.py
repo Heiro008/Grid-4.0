@@ -81,9 +81,9 @@ class ImageSubscriber(Node):
 
 		self.distortion_coefficients = np.array([[ 0.24030483, -0.75567233,  0.00286373, -0.00462205, -0.65268243]])
 
-		self.tag_length = 0.048  # in metres, length of one marker on the board
-		self.tag_separation = 0.005   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
-		self.board = cv2.aruco.GridBoard_create(3, 4, self.tag_length, self.tag_separation, self.arucoDict)
+		self.tag_length = 0.054  # in metres, length of one marker on the board
+		self.tag_separation = 0.0055   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
+		self.board = cv2.aruco.GridBoard_create(4, 3, self.tag_length, self.tag_separation, self.arucoDict)
 		        # first number = no. of columns of markers in the board
 		        # second number = no. of rows of markers in the board
 		
@@ -233,7 +233,7 @@ class ImageSubscriber(Node):
 				self.camera_pose_msg.pose.position.x = camera_origin[0]  
 				self.camera_pose_msg.pose.position.y = camera_origin[1]
 				#feeding the range_finder value to the z position
-				self.camera_pose_msg.pose.position.z = float(self.height)     #camera_origin[2]
+				self.camera_pose_msg.pose.position.z = camera_origin[2]    #float(self.height) 
 				self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
 				self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
 				self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
@@ -259,7 +259,8 @@ class ImageSubscriber(Node):
 
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
 			self.camera_pose_msg.header.frame_id = 'map'
-			self.camera_pose_msg.pose.position.z = float(self.height)
+			if self.height < 50:
+				self.camera_pose_msg.pose.position.z = float(self.height)
 			self.camera_pose.publish(self.camera_pose_msg)
 			#print("CAMERA position: ", self.camera_pose_msg)
 

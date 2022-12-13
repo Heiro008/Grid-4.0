@@ -87,17 +87,17 @@ class range_finder(Node):
         try:
             while True:
                 self.dist = abs(distance())
-                #print ("Measured Distance = %.1f cm" % dist)
+                print ("Measured raw Distance = %.1f cm" % self.dist)
                 if self.dist>400:
                     self.dist = self.prev_dist
-                if abs(self.dist-self.prev_dist)>40 and self.count<7:
+                if abs(self.dist-self.prev_dist)>30 and self.count<7:
                     self.dist = self.prev_dist
                     self.count+=1
                 else:
                     self.count = 0
                     self.prev_dist = self.dist
                 print ("Measured Distance = %.1f cm" % self.dist)
-                time.sleep(0.05)
+                time.sleep(0.05)    
                 self.msg.data = float(self.dist)
 
                 self.range_pub.publish(self.msg)
