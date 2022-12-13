@@ -30,7 +30,19 @@ class control_node(Node):
 		self.local_position = self.create_subscription(PoseStamped, '/mavros/local_position/pose', self.update_height, qos_profile)
 		self.local_position
 		self.rc = OverrideRCIn()
-		
+		self.set_point = self.create_publisher(PoseStamped, '/mavros/setpoint_position/local', 1)
+		self.set_point_msg = PoseStamped()
+
+		self.set_point_msg.pose.position.x = 0.1
+		self.set_point_msg.pose.position.y = -0.15
+		self.set_point_msg.pose.position.z = 0.0
+
+		quat = tf.quaternion_from_euler(0,0,0)
+
+		self.set_point_msg.pose.orientation.x = quat[1]
+		self.set_point_msg.pose.orientation.y = quat[2]
+		self.set_point_msg.pose.orientation.z = quat[3]
+		self.set_point_msg.pose.orientation.w = quat[0]
 
 		#first arm and then give commands
 		#req = CommandBool()
@@ -56,8 +68,12 @@ class control_node(Node):
 		resp = self.arm_service.call_async(req)
 		rclpy.spin_until_future_complete(self, resp)
 		print('armed')
-		
+
 		time.sleep(2)
+
+		self.set_point_msg.pose.position.x = 0.1
+		self.set_point_msg.pose.position.y = -0.15
+		self.set_point_msg.pose.position.z = 0.8
 
 		while not self.takeoff.wait_for_service(timeout_sec=1):
 			self.get_logger().info('service not available, waiting again...')
@@ -67,7 +83,14 @@ class control_node(Node):
 		rclpy.spin_until_future_complete(self, resp)
 		print('takeoff')
 
-		time.sleep(30)
+
+		time.sleep(20)
+
+		print('setpoint')
+		self.set_point_msg.header.stamp = self.get_clock().now().to_msg()
+		self.set_point.publish(self.set_point_msg)
+
+		time.sleep(20)
 
 		print('landing')
 		while not self.change_mode.wait_for_service(timeout_sec=1):

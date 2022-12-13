@@ -37,7 +37,7 @@ def wait_conn():
         time.sleep(0.5)
 
 
-master = mavutil.mavlink_connection('udpout:192.168.75.218:14590')
+master = mavutil.mavlink_connection('udpout:192.168.11.218:14590')
 #master = mavutil.mavlink_connection("/dev/ttyACM0", baud=115200)
 print('waiting')
 #master.wait_heartbeat()
