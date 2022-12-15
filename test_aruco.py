@@ -87,7 +87,21 @@ class ImageSubscriber(Node):
 		        # first number = no. of columns of markers in the board
 		        # second number = no. of rows of markers in the board
 		
-		self.board_ids = {0: [i for i in range(1, 12+1)], 1: [i for i in range(13, 24+1)]}
+		self.no_of_boards = 2
+		self.boards = []
+		self.board_ids = {}
+		for i in range(self.no_of_boards):
+			self.boards.append(cv2.aruco.GridBoard_create(4, 3, self.tag_length, self.tag_separation, self.arucoDict, 12*i))
+		        	# first number = no. of columns of markers in the board
+			        # second number = no. of rows of markers in the board
+			        # last number = id of the first marker in the gridboard! very important.
+			self.board_ids[i] = [j for j in range(12*i, 12*(i+1))]
+			
+		self.board_offset = {}
+		self.board_offset[0] = (0, 0)  # (x,y) offset values for board 0
+		self.board_offset[1] = (20, 0)
+
+		#self.board_ids = {0: [i for i in range(0, 11+1)], 1: [i for i in range(12, 23+1)]}
 			# add ids present in each board here. the keys start from 0,1,2,3.. and so on
 		
 		#self.tf_broadcaster = TransformBroadcaster(self)
@@ -157,7 +171,7 @@ class ImageSubscriber(Node):
 		#self.image_flag = False
 		#image = cv2.cvtColor(self.image_data,cv2.COLOR_RGB2BGR)
 		(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict, parameters=self.arucoParams)
-		cv2.aruco.refineDetectedMarkers(image, self.board, corners, ids, rejected)  # not sure what this is for
+		#cv2.aruco.refineDetectedMarkers(image, self.board, corners, ids, rejected)  # not sure what this is for
 		       # maybe this above function can be applied only when the board alone is visible in frame?
 		       # i think not, but just check once to be sureee
 
@@ -178,13 +192,19 @@ class ImageSubscriber(Node):
 			for i in range(len(ids)):    # first, split the corners
 				for j in range(len(self.board_ids)):
 					if ids[i] in self.board_ids[j]:
-						ids_split[j].append(ids[i])
-						corners_split[j].append(corners[i*4 : i*4+4])
+						ids_split[j].append([ids[i]])
+						corners_split[j].append(corners[i])
 						
+			for i in range(len(ids_split)):
+				ids_split[i] = np.reshape(ids_split[i], (len(ids_split[i]), 1))
+			
 			
 			for i in range(len(ids_split)):
+				tvec = None
+				rvec = None
+				
 				if len(ids_split[i]) > 0:
-					ret_val, rvec, tvec = cv2.aruco.estimatePoseBoard(corners_split[i], ids_split[i], self.board, self.matrix_coefficients, self.distortion_coefficients,tvec,rvec)  
+					ret_val, rvec, tvec = cv2.aruco.estimatePoseBoard(corners_split[i], ids_split[i], self.boards[i], self.matrix_coefficients, self.distortion_coefficients,rvec,tvec)  
 				else:
 					continue
 				# posture estimation from a diamond
@@ -259,8 +279,8 @@ class ImageSubscriber(Node):
 					#q_new.normalize()
 					self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
 					self.camera_pose_msg.header.frame_id = 'map'
-					self.camera_pose_msg.pose.position.x = camera_origin[0]  
-					self.camera_pose_msg.pose.position.y = camera_origin[1]
+					self.camera_pose_msg.pose.position.x = camera_origin[0] + self.board_offset[i][0] 
+					self.camera_pose_msg.pose.position.y = camera_origin[1] + self.board_offset[i][1]
 					#feeding the range_finder value to the z position
 					self.camera_pose_msg.pose.position.z = camera_origin[2]    #float(self.height) 
 					self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
