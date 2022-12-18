@@ -252,8 +252,6 @@ class ImageSubscriber(Node):
 						min_dis = self.board_details[i][4]
 						board_selected = i		
 				
-				# posture estimation from a diamond
-				# i hope it works for gridboards as well?
 				
 				#ret_val_list.append(ret_val)
 				#rvec_list.append(rvec)
