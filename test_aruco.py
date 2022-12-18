@@ -198,9 +198,6 @@ class ImageSubscriber(Node):
 			ids_split = [[] for i in range(self.no_of_boards)]
 			#ids_split_new = [[] for i in range(len(self.board_ids))]
 			
-			#ret_val_list = []
-			#rvec_list = []
-			#tvec_list = []
 			
 			#for i in range(len(ids)):    # first, split the corners
 			#	for j in range(len(self.board_ids)):
@@ -283,15 +280,6 @@ class ImageSubscriber(Node):
 
 				cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
 
-				#tvec[0][0][1] = -tvec[0][0][1]
-				#tvec[0][0][2] = -tvec[0][0][2]
-				#tmp = rvec[0][0][0]
-				#rvec[0][0][0] = rvec[0][0][1]
-				#rvec[0][0][1] = -tmp
-				#rvec[0][0][0] = -rvec[0][0][0] - np.pi
-
-
-				#print(rvec)
 				rot_mat = cv2.Rodrigues(rvec)
 				euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
 				p_quat = Quaternion()
