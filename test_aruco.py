@@ -38,7 +38,6 @@ class ImageSubscriber(Node):
 	def __init__(self):
 		super().__init__('image_subscriber')   # subscriber node name
 		#self.subscription = self.create_subscription(CompressedImage, 'camera_image', self.listener_callback, 10)
-
 		self.subscription = self.create_subscription(Image, 'image_raw', self.listener_callback, 1)
 		self.subscription
 		self.range_finder = self.create_subscription(Float32,'/range_finder/ultrasonic', self.update_height, 10)
@@ -75,32 +74,42 @@ class ImageSubscriber(Node):
 		self.arucoDict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_250)
 		self.arucoParams = cv2.aruco.DetectorParameters_create()
 
+		###########################################
 		self.matrix_coefficients = np.array([[1.26415545e+03, 0.00000000e+00, 6.14268000e+02],
 									[0.00000000e+00, 1.26790106e+03, 5.07574844e+02],
 									[0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
 
 		self.distortion_coefficients = np.array([[ 0.24030483, -0.75567233,  0.00286373, -0.00462205, -0.65268243]])
-
-		self.tag_length = 0.052  # in metres, length of one marker on the board
-		self.tag_separation = 0.005   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
+		###########################################
+		self.tag_length = 0.055  # in metres, length of one marker on the board
+		self.tag_separation = 0.008   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
 		self.board = cv2.aruco.GridBoard_create(4, 3, self.tag_length, self.tag_separation, self.arucoDict)
 		        # first number = no. of columns of markers in the board
 		        # second number = no. of rows of markers in the board
 		
-		self.no_of_boards = 2
+		self.no_of_boards = 6
 		self.boards = []
-		self.board_ids = {}
+		self.board_details = {}
 		for i in range(self.no_of_boards):
 			self.boards.append(cv2.aruco.GridBoard_create(4, 3, self.tag_length, self.tag_separation, self.arucoDict, 12*i))
 		        	# first number = no. of columns of markers in the board
 			        # second number = no. of rows of markers in the board
 			        # last number = id of the first marker in the gridboard! very important.
-			self.board_ids[i] = [j for j in range(12*i, 12*(i+1))]
+			self.board_details[i] = [[j for j in range(12*i, 12*(i+1))], None, None, None, None]
+		
+		######## CHECK THESE VALUES ###########################
+		self.board_details[0][1] = (0,0)
+		self.board_details[1][1] = (119.5/100, 0)
+		self.board_details[2][1] = (0, 93.5/100)
+		self.board_details[3][1] = (119.5/100, 93.5/100)
+		#self.board_details[4][1] = (0, )
+		#self.board_details[5][1] = (119.5/100, )
+		#######################################################
 			
-		self.board_offset = {}
-		self.board_offset[0] = (0, 0)	# (x,y) offset values for board 0. If you consider as (0,0), define all other
+		#self.board_offset = {}
+		#self.board_offset[0] = (0, 0)	# (x,y) offset values for board 0. If you consider as (0,0), define all other
 						# board offsets from this board.
-		self.board_offset[1] = (30/100, 0)
+		#self.board_offset[1] = (30/100, 0)
 
 		#self.board_ids = {0: [i for i in range(0, 11+1)], 1: [i for i in range(12, 23+1)]}
 			# add ids present in each board here. the keys start from 0,1,2,3.. and so on
@@ -178,47 +187,71 @@ class ImageSubscriber(Node):
 
 		tvec = None
 		rvec = None
+		
+		
 		if len(corners) > 6 :   # or ids!=None
 		
-			corners_split = [[] for i in range(len(self.board_ids))]  # have to check if datatype matches
+			corners_split = [[] for i in range(self.no_of_boards)]  # have to check if datatype matches
 				# this will store the corners of each board in the arena, separately.
 				# for boards that are not detected in the frame, empty list [] will be stored
 			
-			ids_split = [[] for i in range(len(self.board_ids))]
-			ids_split_new = [[] for i in range(len(self.board_ids))]
+			ids_split = [[] for i in range(self.no_of_boards)]
+			#ids_split_new = [[] for i in range(len(self.board_ids))]
 			
 			#ret_val_list = []
 			#rvec_list = []
 			#tvec_list = []
 			
-			for i in range(len(ids)):    # first, split the corners
-				for j in range(len(self.board_ids)):
-					if ids[i] in self.board_ids[j]:
-						ids_split[j].append([ids[i]])
-						corners_split[j].append(corners[i])
+			#for i in range(len(ids)):    # first, split the corners
+			#	for j in range(len(self.board_ids)):
+			#		if ids[i] in self.board_ids[j]:
+			#			ids_split[j].append([ids[i]])
+			#			corners_split[j].append(corners[i])
+						
+			for i in range(len(ids)):
+				j = ids[i][0] // 12
+				ids_split[j].append([ids[i]])
+				corners_split[j].append(corners[i])
 						
 			for i in range(len(ids_split)):
 				ids_split[i] = np.reshape(ids_split[i], (len(ids_split[i]), 1))
 			
-			i_max = 0
-			ids_split_new[i_max] = ids_split[i_max]
-			for i in range(1, len(ids_split)):
-				if len(ids_split[i]) > len(ids_split[i_max]):
-					ids_split_new[i] = ids_split[i]
-					ids_split_new[i_max] = []
-					i_max = i
-				else:
-					ids_split_new[i] = []
+			#i_max = 0
+			#ids_split_new[i_max] = ids_split[i_max]
+			#for i in range(1, len(ids_split)):
+			#	if len(ids_split[i]) > len(ids_split[i_max]):
+			#		ids_split_new[i] = ids_split[i]
+			#		ids_split_new[i_max] = []
+			#		i_max = i
+			#	else:
+			#		ids_split_new[i] = []
 			
+			boards_detected = set()
+			board_selected = None
 			
-			for i in range(len(ids_split_new)):
+			for i in range(len(ids_split)):
 				tvec = None
 				rvec = None
 				
-				if len(ids_split_new[i]) > 0:
-					ret_val, rvec, tvec = cv2.aruco.estimatePoseBoard(corners_split[i], ids_split_new[i], self.boards[i], self.matrix_coefficients, self.distortion_coefficients,rvec,tvec)  
+				if len(ids_split[i]) > 6:
+					ret_val, rvec, tvec = cv2.aruco.estimatePoseBoard(corners_split[i], ids_split[i], self.boards[i], self.matrix_coefficients, self.distortion_coefficients,rvec,tvec)
+					self.board_details[i][2] = tvec
+					self.board_details[i][3] = rvec
+					rvec_tmp, tvec_tmp, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners_split[i][0], self.tag_length, self.matrix_coefficients,self.distortion_coefficients)
+					self.board_details[i][4] = float(tvec_tmp[0][0][0])**2 + float(tvec_tmp[0][0][1])**2
+					boards_detected.add(i)
 				else:
 					continue
+					
+			boards_detected = list(boards_detected)
+				
+			if boards_detected:
+				min_dis = self.board_details[boards_detected[0]][4]
+				for i in boards_detected:
+					if self.board_details[i][4] <= min_dis:
+						min_dis = self.board_details[i][4]
+						board_selected = i		
+				
 				# posture estimation from a diamond
 				# i hope it works for gridboards as well?
 				
@@ -227,100 +260,103 @@ class ImageSubscriber(Node):
 				#tvec_list.append(tvec)
 
 			#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients, self.distortion_coefficients, tvec, rvec)
-				if ret_val>0:
-					
-					# Draw a square around the markers
-					cv2.aruco.drawDetectedMarkers(image, corners, ids, (0,255,0))  # what colour is this ?
-
-					self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
-					self.object_pose_msg.header.frame_id = 'camera'
-					#print(tvec.shape)
-					#object_pose_msg_tranform = TransformStamped()
-					#object_pose_msg_tranform.header.stamp = self.get_clock().now().to_msg()
-					#object_pose_msg_tranform.header.frame_id = 'tf_broadcaster_'
-					#print(tvec)
-					self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
-					self.object_pose_msg.pose.position.x = float(tvec[0][0])   #+ offset[ids[i]][0]
-					self.object_pose_msg.pose.position.y = float(tvec[1][0])   #+ offset[ids[i]][1]
-					self.object_pose_msg.pose.position.z = float(tvec[2][0])
-					#print(rvec[i][0])
-					rvec = rvec.reshape(1,1,3)
-					tvec = tvec.reshape(1,1,3)
-
-					cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
-
-					#tvec[0][0][1] = -tvec[0][0][1]
-					#tvec[0][0][2] = -tvec[0][0][2]
-					#tmp = rvec[0][0][0]
-					#rvec[0][0][0] = rvec[0][0][1]
-					#rvec[0][0][1] = -tmp
-					#rvec[0][0][0] = -rvec[0][0][0] - np.pi
-
-
-					#print(rvec)
-					rot_mat = cv2.Rodrigues(rvec)
-					euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
-					p_quat = Quaternion()
-					if euler_angles[0] > 0:
-						euler_angles[0] = euler_angles[0] - np.pi
-					else:
-						euler_angles[0] = euler_angles[0] + np.pi
-					p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
-					p_quat.w = p_quat_raw[0]		
-					p_quat.x = p_quat_raw[1]
-					p_quat.y = p_quat_raw[2]
-					p_quat.z = p_quat_raw[3]
-					#p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
-
-					self.object_pose_msg.pose.orientation = p_quat
-
-					self.object_pose.publish(self.object_pose_msg)
-
-					#self.tf_broadcaster.sendTransform(object_pose_msg_tranform)
-					#use python transformation library to find the inverse transforms
-
-					#print(tvec)
-					transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
-					inv_transform = tf.inverse_matrix(transform)
-					camera_origin = tf.translation_from_matrix(inv_transform)
-					camera_quaternion = tf.quaternion_from_matrix(inv_transform)
-					#'sxyz'
-					q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)	
-					q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
-					q_new = tf.unit_vector(q_new)
-					#q_new.normalize()
-					self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
-					self.camera_pose_msg.header.frame_id = 'map'
-					camera_origin[0] = camera_origin[0] + self.board_offset[i][0] 
-					camera_origin[1] = camera_origin[1] + self.board_offset[i][1]
-					print(i, camera_origin)
-					self.camera_pose_msg.pose.position.x = camera_origin[0]
-					self.camera_pose_msg.pose.position.y = camera_origin[1]
-					#feeding the range_finder value to the z position
-					self.camera_pose_msg.pose.position.z = camera_origin[2]    #float(self.height) 
-					self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
-					self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
-					self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
-					self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
-					#self.camera_pose_msg.pose.position = self.object_pose_msg.pose.position
-					#print('OBJECT position:', tvec)
-					#print('CAMERA position:', camera_origin)
-					
-					# ------ THIS PART NEEDS EDITING ------ #
-					#for i in ids:
-						#if i == 3:
-							#self.camera_pose.publish(self.camera_pose_msg)
-							#print('marker',tvec)
-							#print(rvec)
-							#print(euler_angles)
-							#print('camera',round(camera_origin[0],5), round(camera_origin[1],5), round(camera_origin[2], 5))
-					# ------------------------------------ #
-					self.camera_pose.publish(self.camera_pose_msg)
+			if board_selected!=None:
 				
-				#  print(tvec)
-	        	# Draw Axis
-	        	
+				# Draw a square around the markers
+				cv2.aruco.drawDetectedMarkers(image, corners_split[board_selected], ids_split[board_selected], (0,255,0)) 
 				
+				tvec = self.board_details[board_selected][2]
+				rvec = self.board_details[board_selected][3]
+				
+				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
+				self.object_pose_msg.header.frame_id = 'camera'
+				#print(tvec.shape)
+				#object_pose_msg_tranform = TransformStamped()
+				#object_pose_msg_tranform.header.stamp = self.get_clock().now().to_msg()
+				#object_pose_msg_tranform.header.frame_id = 'tf_broadcaster_'
+				#print(tvec)
+				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
+				self.object_pose_msg.pose.position.x = float(tvec[0][0])   #+ offset[ids[i]][0]
+				self.object_pose_msg.pose.position.y = float(tvec[1][0])   #+ offset[ids[i]][1]
+				self.object_pose_msg.pose.position.z = float(tvec[2][0])
+				#print(rvec[i][0])
+				rvec = rvec.reshape(1,1,3)
+				tvec = tvec.reshape(1,1,3)
+
+				cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
+
+				#tvec[0][0][1] = -tvec[0][0][1]
+				#tvec[0][0][2] = -tvec[0][0][2]
+				#tmp = rvec[0][0][0]
+				#rvec[0][0][0] = rvec[0][0][1]
+				#rvec[0][0][1] = -tmp
+				#rvec[0][0][0] = -rvec[0][0][0] - np.pi
+
+
+				#print(rvec)
+				rot_mat = cv2.Rodrigues(rvec)
+				euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
+				p_quat = Quaternion()
+				if euler_angles[0] > 0:
+					euler_angles[0] = euler_angles[0] - np.pi
+				else:
+					euler_angles[0] = euler_angles[0] + np.pi
+				p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
+				p_quat.w = p_quat_raw[0]		
+				p_quat.x = p_quat_raw[1]
+				p_quat.y = p_quat_raw[2]
+				p_quat.z = p_quat_raw[3]
+				#p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
+
+				self.object_pose_msg.pose.orientation = p_quat
+
+				self.object_pose.publish(self.object_pose_msg)
+
+				#self.tf_broadcaster.sendTransform(object_pose_msg_tranform)
+				#use python transformation library to find the inverse transforms
+
+				#print(tvec)
+				transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
+				inv_transform = tf.inverse_matrix(transform)
+				camera_origin = tf.translation_from_matrix(inv_transform)
+				camera_quaternion = tf.quaternion_from_euler(np.pi, 0, euler_angles[2])
+				#'sxyz'
+				q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)	
+				q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
+				q_new = tf.unit_vector(q_new)
+				#q_new.normalize()
+				self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
+				self.camera_pose_msg.header.frame_id = 'map'
+				camera_origin[0] = camera_origin[0] + self.board_details[board_selected][1][0] 
+				camera_origin[1] = camera_origin[1] + self.board_details[board_selected][1][1]
+				print(i, camera_origin)
+				self.camera_pose_msg.pose.position.x = camera_origin[0]
+				self.camera_pose_msg.pose.position.y = camera_origin[1]
+				#feeding the range_finder value to the z position
+				self.camera_pose_msg.pose.position.z = camera_origin[2]    #float(self.height) 
+				self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
+				self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
+				self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
+				self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
+				#self.camera_pose_msg.pose.position = self.object_pose_msg.pose.position
+				#print('OBJECT position:', tvec)
+				#print('CAMERA position:', camera_origin)
+				
+				# ------ THIS PART NEEDS EDITING ------ #
+				#for i in ids:
+					#if i == 3:
+						#self.camera_pose.publish(self.camera_pose_msg)
+						#print('marker',tvec)
+						#print(rvec)
+						#print(euler_angles)
+						#print('camera',round(camera_origin[0],5), round(camera_origin[1],5), round(camera_origin[2], 5))
+				# ------------------------------------ #
+				self.camera_pose.publish(self.camera_pose_msg)
+			
+			#  print(tvec)
+        	# Draw Axis
+        	
+			
 		else:
 
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
