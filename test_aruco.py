@@ -80,6 +80,12 @@ class ImageSubscriber(Node):
 									[0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
 
 		self.distortion_coefficients = np.array([[ 0.24030483, -0.75567233,  0.00286373, -0.00462205, -0.65268243]])
+
+		self.matrix_coefficients = np.array( [[472.46389744  , 0.      ,   265.15033673],
+ 									[  0.    ,     473.06566789 ,285.9249716 ],
+ 									[  0.    ,       0.   ,        1.        ]] )
+
+		self.distortion_coefficients = np.array([[-0.39297927,  0.148505,   -0.00703395,  0.01307684 ,-0.03332911]])
 		###########################################
 		self.tag_length = 0.055  # in metres, length of one marker on the board
 		self.tag_separation = 0.008   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
@@ -87,7 +93,7 @@ class ImageSubscriber(Node):
 		        # first number = no. of columns of markers in the board
 		        # second number = no. of rows of markers in the board
 		
-		self.no_of_boards = 6
+		self.no_of_boards = 8
 		self.boards = []
 		self.board_details = {}
 		for i in range(self.no_of_boards):
@@ -100,10 +106,10 @@ class ImageSubscriber(Node):
 		######## CHECK THESE VALUES ###########################
 		self.board_details[0][1] = (0,0)
 		self.board_details[1][1] = (119.5/100, 0)
-		self.board_details[2][1] = (0, 93.5/100)
-		self.board_details[3][1] = (119.5/100, 93.5/100)
-		#self.board_details[4][1] = (0, )
-		#self.board_details[5][1] = (119.5/100, )
+		self.board_details[2][1] = (0, 95.3/100)
+		self.board_details[3][1] = (119.5/100, 95.3/100)		# 189.5
+		self.board_details[4][1] = (0, 189.5/100)
+		self.board_details[5][1] = (119.5/100, 189.5/100)
 		#######################################################
 			
 		#self.board_offset = {}
@@ -206,9 +212,10 @@ class ImageSubscriber(Node):
 			#			corners_split[j].append(corners[i])
 						
 			for i in range(len(ids)):
-				j = ids[i][0] // 12
-				ids_split[j].append([ids[i]])
-				corners_split[j].append(corners[i])
+				if ids[i]<96:
+					j = ids[i][0] // 12
+					ids_split[j].append([ids[i]])
+					corners_split[j].append(corners[i])
 						
 			for i in range(len(ids_split)):
 				ids_split[i] = np.reshape(ids_split[i], (len(ids_split[i]), 1))

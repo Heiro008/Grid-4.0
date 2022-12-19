@@ -11,6 +11,7 @@ GPIO.setmode(GPIO.BCM)
 #set GPIO Pins
 GPIO_TRIGGER = 16
 GPIO_ECHO = 24
+GPIO_MAGNET = 21
 
 start_time = time.time()
 
@@ -35,7 +36,12 @@ wait_conn()
 
 GPIO.setup(GPIO_TRIGGER, GPIO.OUT)
 GPIO.setup(GPIO_ECHO, GPIO.IN)
- 
+GPIO.setup(GPIO_MAGNET, GPIO.OUT)
+print('on')
+GPIO.output(GPIO_MAGNET, True)
+
+
+
 def distance():
     # set Trigger to HIGH
     GPIO.output(GPIO_TRIGGER, True)
@@ -108,6 +114,9 @@ class range_finder(Node):
                     current_distance=int(self.dist),
                     type=1,id=1,orientation=25,covariance=255)
         except KeyboardInterrupt:
+
+            GPIO.output(GPIO_MAGNET, False)
+            print('off')
             print("Measurement stopped by User")
             GPIO.cleanup()
 
