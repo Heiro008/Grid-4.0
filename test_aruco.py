@@ -37,7 +37,7 @@ def rotationMatrixToEulerAngles(R):
 class ImageSubscriber(Node):
 	def __init__(self):
 		super().__init__('image_subscriber')   # subscriber node name
-		#self.subscription = self.create_subscription(CompressedImage, 'camera_image', self.listener_callback, 10)
+		
 		self.subscription = self.create_subscription(Image, 'image_raw', self.listener_callback, 1)
 		self.subscription
 		self.range_finder = self.create_subscription(Float32,'/range_finder/ultrasonic', self.update_height, 10)
@@ -205,7 +205,7 @@ class ImageSubscriber(Node):
 			#			ids_split[j].append([ids[i]])
 			#			corners_split[j].append(corners[i])
 						
-			for i in range(len(ids)):
+			for i in range(len(ids)):    ###### if ids[i] < 72
 				j = ids[i][0] // 12
 				ids_split[j].append([ids[i]])
 				corners_split[j].append(corners[i])
@@ -235,6 +235,7 @@ class ImageSubscriber(Node):
 					self.board_details[i][2] = tvec
 					self.board_details[i][3] = rvec
 					rvec_tmp, tvec_tmp, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners_split[i][0], self.tag_length, self.matrix_coefficients,self.distortion_coefficients)
+					#print(i, tvec, tvec_tmp)
 					self.board_details[i][4] = float(tvec_tmp[0][0][0])**2 + float(tvec_tmp[0][0][1])**2
 					boards_detected.add(i)
 				else:

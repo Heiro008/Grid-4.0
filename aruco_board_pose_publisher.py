@@ -169,7 +169,7 @@ class ImageSubscriber(Node):
 			if ret_val>0:
 		        	
 				# Draw a square around the markers
-				cv2.aruco.drawDetectedMarkers(image, corners, ids, (0,255,0))  # what colour is this ?
+				cv2.aruco.drawDetectedMarkers(image, corners, ids, (0,255,0))  # BGR value i think
 
 				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
 				self.object_pose_msg.header.frame_id = 'camera'
