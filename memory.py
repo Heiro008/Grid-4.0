@@ -35,26 +35,18 @@ class control_node(Node):
 		self.a = np.array([0.0, 0.0], dtype=np.float64)
 		self.shm = shared_memory.SharedMemory(name = 'Local_position', create=True, size=self.a.nbytes)
 		self.b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
-		# self.rc = OverrideRCIn()
-		# self.set_point = self.create_publisher(PoseStamped, '/mavros/setpoint_position/local', 1)
-		# self.set_point_msg = PoseStamped()
 
-		# self.set_point_msg.pose.position.x = 0.1
-		# self.set_point_msg.pose.position.y = -0.15
-		# self.set_point_msg.pose.position.z = 0.0
+		# 0 -> package_detected
+		# 1 -> package_coordinate_flag
+		# 2 -> near_package 
+		# 3 -> pose_package
+		self.flags = np.array([0,0,0,0], dtype=np.bool)
+		self.shm_flags = shared_memory.SharedMemory(name = 'flags', create=True, size=self.flags.nbytes)
+		#self.b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
+		self.package_coordinate = np.array([0.0, 0.0], dtype=np.float64)
+		self.shm = shared_memory.SharedMemory(name = 'package_coordinate', create=True, size=self.package_coordinate.nbytes)
+		#self.b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)	
 
-		# quat = tf.quaternion_from_euler(0,0,np.pi/2)	
-
-		# self.set_point_msg.pose.orientation.x = quat[1]
-		# self.set_point_msg.pose.orientation.y = quat[2]
-		# self.set_point_msg.pose.orientation.z = quat[3]
-		# self.set_point_msg.pose.orientation.w = quat[0]
-
-		#first arm and then give commands
-		#req = CommandBool()
-		# self.arm_service = self.create_client(CommandBool, '/mavros/cmd/arming')
-		# self.change_mode = self.create_client(SetMode, '/mavros/set_mode')
-		# self.takeoff = self.create_client(CommandTOL, '/mavros/cmd/takeoff')
 
 
 	def __del__(self):
@@ -73,34 +65,6 @@ class control_node(Node):
 		self.a[1] = data.pose.position.y
 		#b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
 		self.b[:] = self.a[:]
-		# if height < 0.8:
-		# 	if self.flag:
-		# 		self.rc.channels = [1500,1500,1590,1500,1100,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]
-		# 	else:	
-		# 		self.rc.channels = [1500,1500,1500,1500,1300,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]
-
-
-		# else:
-		# 	self.rc.channels = [1500,1500,1500,1500,1300,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]
-		# 	self.flag = False
-		# 	if(self.flag):
-		# 		self.override_pub.publish(self.rc)
-		# 		#time.sleep(0.1)
-		# 		while not self.change_mode.wait_for_service(timeout_sec=1):
-		# 			self.get_logger().info('service not available, waiting again...')
-		# 		req = SetMode.Request()
-		# 		req.custom_mode = 'GUIDED'
-		# 		resp = self.change_mode.call_async(req)
-		# 		print('done')
-		# 		#rclpy.spin_until_future_complete(self, resp)
-		# 		self.get_logger().info('mode changed')
-				
-
-		# self.get_logger().info('published')
-		# self.override_pub.publish(self.rc)
-		# mode 0 = STABILIZE
-		# mode 4 = GUIDED
-		# mode 9 = LAND
 
 		
 

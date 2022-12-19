@@ -145,6 +145,35 @@ class control_node(Node):
 		self.set_point.publish(self.set_point_msg)
 
 		time.sleep(10)
+		count = 0
+
+		for targets in target_list:
+			goto_target(targets[0],targets[1],1.0)
+			while not package_detected:
+				if local_point == target:   # local_point is shared memory
+					break
+			if package_detected:
+				goto_(local_position)
+				time.sleep(10)
+				while not package_coordinate_flag:
+					pass
+				goto_(package_coordinate)
+
+				package_coordinate_flag = False
+				while not near_package:
+					pass
+				prev_point = local_position
+				goto_(local_position) ## reduce the height to 0.5  ( fix height based on field of view)
+				pose_package = True
+				#pose_publisher pose estimation 
+				precision_land()
+				#publish package_picked up topic
+				pose_package = False
+				count += 1
+				self.package_drop_routine(prev_point,count)  # drop and then come back to previous point
+				time.sleep(20)
+				package_detected = False
+
 
 
 		self.set_point_msg.pose.position.x = 0.54
@@ -258,6 +287,15 @@ class control_node(Node):
 
 
 
+	def goto_target(x,y,z):
+		self.set_point_msg.pose.position.x = x
+		self.set_point_msg.pose.position.y = y
+		self.set_point_msg.pose.position.z = z
+
+		#print('1st setpoint')
+		self.set_point_msg.header.stamp = self.get_clock().now().to_msg()
+		self.set_point.publish(self.set_point_msg)
+
 
 	def __del__(self):
 		del self.local_pos_estimate
@@ -270,6 +308,15 @@ class control_node(Node):
 	# 		#time.sleep(0.5)
 	# 		pass
 
+	def package_drop_routine(prev_point):
+
+		##
+
+		pass
+		if count==2:
+			## after dropping the package
+			## goto_(landind_pad_coordinate)
+		##
 	def update_height(self, data):
 
 		local_position_msg = data
