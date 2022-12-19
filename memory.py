@@ -44,7 +44,7 @@ class control_node(Node):
 		self.shm_flags = shared_memory.SharedMemory(name = 'flags', create=True, size=self.flags.nbytes)
 		#self.b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
 		self.package_coordinate = np.array([0.0, 0.0], dtype=np.float64)
-		self.shm = shared_memory.SharedMemory(name = 'package_coordinate', create=True, size=self.package_coordinate.nbytes)
+		self.shm_pkg_coord = shared_memory.SharedMemory(name = 'package_coordinate', create=True, size=self.package_coordinate.nbytes)
 		#self.b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)	
 
 

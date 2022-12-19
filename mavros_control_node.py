@@ -40,6 +40,21 @@ class control_node(Node):
 		self.shm = shared_memory.SharedMemory(name = 'Local_position', create=False, size=self.a.nbytes)
 		self.local_pos_estimate = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
 		self.new_setpoint = None
+		
+		self.flags = np.array([0,0,0,0], dtype=np.bool)
+		self.shm_flags = shared_memory.SharedMemory(name = 'flags', create=False, size=self.flags.nbytes)
+		#self.b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
+		self.flags_status = np.ndarray(self.flags.shape, dtype=self.flags.dtype, buffer=self.shm_flags.buf)
+		# 0 -> package_detected
+		# 1 -> package_coordinate_flag
+		# 2 -> near_package 
+		# 3 -> pose_package
+		
+		
+		self.package_coordinate = np.array([0.0, 0.0], dtype=np.float64)
+		self.shm_pkg_coord = shared_memory.SharedMemory(name = 'package_coordinate', create=False, size=self.package_coordinate.nbytes)
+		self.pkg_coord = np.ndarray(self.shm_pkg_coord.shape, dtype=self.shm_pkg_coord.dtype, buffer=self.shm_shm_pkg_coord.buf)
+		
 
 		self.set_point_msg.pose.position.x = 0.1
 		self.set_point_msg.pose.position.y = -0.15
@@ -146,21 +161,25 @@ class control_node(Node):
 
 		time.sleep(10)
 		count = 0
+		
+		
+		target_list = []    ############## to be defined ##############
+		
 
-		for targets in target_list:
-			goto_target(targets[0],targets[1],1.0)
-			while not package_detected:
-				if local_point == target:   # local_point is shared memory
+		for target in target_list:
+			goto_target(target[0],target[1],1.0)
+			while not self.flags_status[0]:     # package_detected
+				if self.local_pos_estimate[0]-target[0]<0.05 and self.local_pos_estimate[1]-target[1]<0.05:   # local_point is shared memory
 					break
-			if package_detected:
-				goto_(local_position)
+			if self.flags_status[0]:
+				goto_target(self.local_pos_estimate[0], self.local_pos_estimate[1], 1.0)
 				time.sleep(10)
-				while not package_coordinate_flag:
+				while not self.flags_status[1]:     # package_coordinate_flag
 					pass
-				goto_(package_coordinate)
+				goto_target(self.pkg_coord[0], self.pkg_coord[1], 1.0)
 
-				package_coordinate_flag = False
-				while not near_package:
+				self.flags_status[1] = False
+				while not self.flags_status[2]:        # near_package  
 					pass
 				prev_point = local_position
 				goto_(local_position) ## reduce the height to 0.5  ( fix height based on field of view)
