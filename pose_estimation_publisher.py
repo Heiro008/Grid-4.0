@@ -69,8 +69,9 @@ class ImageSubscriber(Node):
 
 		self.br = CvBridge()
 		self.image_data = None
-		self.image_flag = False
 		
+		self.change_pose_count = 0
+
 		self.arucoDict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_250)
 		self.arucoDict_package = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_250)
 		self.arucoParams = cv2.aruco.DetectorParameters_create()
@@ -192,7 +193,8 @@ class ImageSubscriber(Node):
 		
 		
 		if len(corners) > 6 and not pose_package:   # or ids!=None
-		
+
+			self.change_pose_count = 0      # reset the counter if normal board is detected
 			corners_split = [[] for i in range(self.no_of_boards)]  # have to check if datatype matches
 				# this will store the corners of each board in the arena, separately.
 				# for boards that are not detected in the frame, empty list [] will be stored
@@ -329,6 +331,9 @@ class ImageSubscriber(Node):
 
 		else:
 
+			if near_package_flag and self.change_pose_count > 5:
+				pose_package = True
+			self.change_pose_count += 1         # count to change the pose estimation method
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
 			self.camera_pose_msg.header.frame_id = 'map'
 			if self.height < 50:

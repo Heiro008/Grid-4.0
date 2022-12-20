@@ -211,18 +211,11 @@ class ImageSubscriber(Node):
 			#			ids_split[j].append([ids[i]])
 			#			corners_split[j].append(corners[i])
 						
-<<<<<<< HEAD
-			for i in range(len(ids)):    ###### if ids[i] < 72
-				j = ids[i][0] // 12
-				ids_split[j].append([ids[i]])
-				corners_split[j].append(corners[i])
-=======
 			for i in range(len(ids)):
 				if ids[i]<96:
 					j = ids[i][0] // 12
 					ids_split[j].append([ids[i]])
 					corners_split[j].append(corners[i])
->>>>>>> f98e2260098932aae293371f7fe3f48448edac7c
 						
 			for i in range(len(ids_split)):
 				ids_split[i] = np.reshape(ids_split[i], (len(ids_split[i]), 1))
@@ -353,10 +346,6 @@ class ImageSubscriber(Node):
 						#print('camera',round(camera_origin[0],5), round(camera_origin[1],5), round(camera_origin[2], 5))
 				# ------------------------------------ #
 				self.camera_pose.publish(self.camera_pose_msg)
-			
-			#  print(tvec)
-        	# Draw Axis
-        	
 			
 		else:
 

@@ -116,137 +116,79 @@ class control_node(Node):
 		self.change_mode = self.create_client(SetMode, '/mavros/set_mode')
 		self.takeoff = self.create_client(CommandTOL, '/mavros/cmd/takeoff')
 
-		time.sleep(2)
-
-		while not self.change_mode.wait_for_service(timeout_sec=1):
-			self.get_logger().info('service not available, waiting again...')
-		req = SetMode.Request()
-		req.custom_mode = 'GUIDED'
-		resp = self.change_mode.call_async(req)
-		rclpy.spin_until_future_complete(self, resp)
-		print('mode changed')
-		
-		time.sleep(2)		
-
-		while not self.arm_service.wait_for_service(timeout_sec=1.0):
-			self.get_logger().info('service not available, waiting again...')
-		req = CommandBool.Request()
-		req.value = True
-		resp = self.arm_service.call_async(req)
-		rclpy.spin_until_future_complete(self, resp)
-		print('armed')
-
-		time.sleep(2)
-		#self.delay_sec(2)
-
-		self.set_point_msg.pose.position.x = 0.1
-		self.set_point_msg.pose.position.y = -0.15
-		self.set_point_msg.pose.position.z = 1.0
-
-		while not self.takeoff.wait_for_service(timeout_sec=1):
-			self.get_logger().info('service not available, waiting again...')
-		req = CommandTOL.Request()
-		req.altitude = 0.6
-		resp = self.takeoff.call_async(req)
-		rclpy.spin_until_future_complete(self, resp)
-		print('takeoff')
+		self.start_navigation()
 
 
-		time.sleep(10)
-		#self.delay_sec(10)
-
-		print('setpoint')
-		self.set_point_msg.header.stamp = self.get_clock().now().to_msg()
-		self.set_point.publish(self.set_point_msg)
-
-		time.sleep(10)
 		count = 0
 		
 		
 		target_list = []    ############## to be defined ##############
 		
-
+#######################################################################################################################
 		for target in target_list:
-			goto_target(target[0],target[1],1.0)
+			self.goto_target(target[0],target[1],1.0)
 			while not self.flags_status[0]:     # package_detected
 				if self.local_pos_estimate[0]-target[0]<0.05 and self.local_pos_estimate[1]-target[1]<0.05:   # local_point is shared memory
 					break
 			if self.flags_status[0]:
-				goto_target(self.local_pos_estimate[0], self.local_pos_estimate[1], 1.0)
+				self.goto_target(self.local_pos_estimate[0], self.local_pos_estimate[1], 1.0)
 				time.sleep(10)
 				while not self.flags_status[1]:     # package_coordinate_flag
 					pass
-				goto_target(self.pkg_coord[0], self.pkg_coord[1], 1.0)
+				self.goto_target(self.pkg_coord[0], self.pkg_coord[1], 1.0)
 
 				self.flags_status[1] = False
 				while not self.flags_status[2]:        # near_package  
 					pass
-				prev_point = local_position
-				goto_(local_position) ## reduce the height to 0.5  ( fix height based on field of view)
-				pose_package = True
+				self.prev_point = self.local_pos_estimate   # array that contains x and y coordinates
+				self.goto_target(self.prev_point[0],self.prev_point[0],0.8) ## reduce the height to 0.5  ( fix height based on field of view)
+				#pose_package = True
 				#pose_publisher pose estimation 
-				precision_land()
+				time.sleep(5)
+				self.goto_target(self.prev_point[0],self.prev_point[0],0.7)
+				time.sleep(5)
+				self.goto_target(self.prev_point[0],self.prev_point[0],0.6)
+				time.sleep(5)
+				self.goto_target(self.prev_point[0],self.prev_point[0],0.5)
+				time.sleep(5)
+				self.goto_target(self.prev_point[0],self.prev_point[0],0.4)
+				time.sleep(5)
+				self.goto_target(self.prev_point[0],self.prev_point[0],0.3)
+
+				self.land()   # normal landing with height reduced
+
 				#publish package_picked up topic
+
 				pose_package = False
+
 				count += 1
-				self.package_drop_routine(prev_point,count)  # drop and then come back to previous point
+				self.package_drop_routine(self.prev_point,count)  # drop and then come back to previous point
 				time.sleep(20)
 				package_detected = False
 
+#######################################################################################################################
 
 
-		self.set_point_msg.pose.position.x = 0.54
-		self.set_point_msg.pose.position.y = -0.12
-		self.set_point_msg.pose.position.z = 1.0
 
-		print('1st setpoint')
+
+	def start_navigation(self):
+		self.takeoff(0.5)
+		time.sleep(10)
+		self.goto_target(0.1,-0.15,1.0)
+		time.sleep(5)
+
+
+
+	def goto_target(self,x,y,z):
+		self.set_point_msg.pose.position.x = x
+		self.set_point_msg.pose.position.y = y
+		self.set_point_msg.pose.position.z = z
+
+		print('setpoint')
 		self.set_point_msg.header.stamp = self.get_clock().now().to_msg()
 		self.set_point.publish(self.set_point_msg)
 
-		time.sleep(15)
-		# print(self.local_pos_estimate)
-
-		
-		# self.set_point_msg.pose.position.x = 0.8
-		# self.set_point_msg.pose.position.y = 0.9
-		# self.set_point_msg.pose.position.z = 1.0
-
-		# print('2nd setpoint')
-		# self.set_point_msg.header.stamp = self.get_clock().now().to_msg()
-		# self.set_point.publish(self.set_point_msg)
-
-		# time.sleep(15)
-		
-		# print(self.local_pos_estimate)
-		
-		# self.set_point_msg.pose.position.x = 0.8
-		# self.set_point_msg.pose.position.y = 1.8
-		# self.set_point_msg.pose.position.z = 1.0
-
-		# print('3rd setpoint')
-		# self.set_point_msg.header.stamp = self.get_clock().now().to_msg()
-		# self.set_point.publish(self.set_point_msg)
-
-		# #self.delay_sec(10)
-		# time.sleep(10)
-
-		print(self.local_pos_estimate)
-		self.new_setpoint = self.local_pos_estimate
-
-		print('landing')
-		while not self.change_mode.wait_for_service(timeout_sec=1):
-			self.get_logger().info('service not available, waiting again...')
-		req = SetMode.Request()
-		req.custom_mode = 'LAND'
-		resp = self.change_mode.call_async(req)
-		rclpy.spin_until_future_complete(self, resp)
-		print('Landed')
-
-		time.sleep(20)
-
-		self.set_point_msg.pose.position.x = self.new_setpoint[0]
-		self.set_point_msg.pose.position.y = self.new_setpoint[1]
-		self.set_point_msg.pose.position.z = 0.0
+	def takeoff(self,height):		# change mode , arm , takeoff
 
 		while not self.change_mode.wait_for_service(timeout_sec=1):
 			self.get_logger().info('service not available, waiting again...')
@@ -255,9 +197,8 @@ class control_node(Node):
 		resp = self.change_mode.call_async(req)
 		rclpy.spin_until_future_complete(self, resp)
 		print('mode changed')
-		
-		time.sleep(2)		
 
+		time.sleep(2)
 
 		while not self.arm_service.wait_for_service(timeout_sec=1.0):
 			self.get_logger().info('service not available, waiting again...')
@@ -272,29 +213,12 @@ class control_node(Node):
 		while not self.takeoff.wait_for_service(timeout_sec=1):
 			self.get_logger().info('service not available, waiting again...')
 		req = CommandTOL.Request()
-		req.altitude = 0.8
+		req.altitude = height
 		resp = self.takeoff.call_async(req)
 		rclpy.spin_until_future_complete(self, resp)
 		print('takeoff')
 
-		
-
-		time.sleep(10)
-
-		self.set_point_msg.pose.position.x = 0.1
-		self.set_point_msg.pose.position.y = -0.15
-		self.set_point_msg.pose.position.z = 1.0
-
-		print('setpoint 4')
-
-		self.set_point_msg.header.stamp = self.get_clock().now().to_msg()
-		self.set_point.publish(self.set_point_msg)
-
-
-
-
-		time.sleep(10)
-
+	def land(self):
 		print('landing')
 		while not self.change_mode.wait_for_service(timeout_sec=1):
 			self.get_logger().info('service not available, waiting again...')
@@ -304,30 +228,7 @@ class control_node(Node):
 		rclpy.spin_until_future_complete(self, resp)
 		print('Landed')
 
-
-
-	def goto_target(x,y,z):
-		self.set_point_msg.pose.position.x = x
-		self.set_point_msg.pose.position.y = y
-		self.set_point_msg.pose.position.z = z
-
-		#print('1st setpoint')
-		self.set_point_msg.header.stamp = self.get_clock().now().to_msg()
-		self.set_point.publish(self.set_point_msg)
-
-
-	def __del__(self):
-		del self.local_pos_estimate
-		self.shm.close()
-		print('closed')
-
-	# def delay_sec(self,t):
-	# 	i_time = time.time()
-	# 	while time.time() - i_time < t:
-	# 		#time.sleep(0.5)
-	# 		pass
-
-	def package_drop_routine(prev_point):
+	def package_drop_routine(self,prev_point):
 
 		##
 
@@ -341,27 +242,11 @@ class control_node(Node):
 		local_position_msg = data
 		height = data.pose.position.z
 		print(round(data.pose.position.x,5),round(data.pose.position.y,5),round(data.pose.position.z,5))
-		# if height < 0.8:
-		# 	if self.flag:
-		# 		self.rc.channels = [1500,1500,1590,1500,1100,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]
-		# 	else:	
-		# 		self.rc.channels = [1500,1500,1500,1500,1300,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]
 
-
-		# else:
-		# 	self.rc.channels = [1500,1500,1500,1500,1300,1000,1000,1000,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535]
-		# 	self.flag = False
-		# 	if(self.flag):
-		# 		self.override_pub.publish(self.rc)
-		# 		#time.sleep(0.1)
-		# 		while not self.change_mode.wait_for_service(timeout_sec=1):
-		# 			self.get_logger().info('service not available, waiting again...')
-		# 		req = SetMode.Request()
-		# 		req.custom_mode = 'GUIDED'
-		# 		resp = self.change_mode.call_async(req)
-		# 		print('done')
-		# 		#rclpy.spin_until_future_complete(self, resp)
-		# 		self.get_logger().info('mode changed')
+	def __del__(self):   # distructor
+		del self.local_pos_estimate
+		self.shm.close()
+		print('closed')
 
 def wait_conn(master):
 	"""
