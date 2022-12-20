@@ -21,6 +21,9 @@ from rclpy.qos import QoSProfile
 from multiprocessing import shared_memory
 from pymavlink import mavutil
 from std_msgs.msg import Bool
+from multiprocessing import resource_tracker
+
+
 
 class control_node(Node):
 	def __init__(self,master):
@@ -37,9 +40,9 @@ class control_node(Node):
 		self.package_picked = self.create_publisher(Bool, '/package_picked_up', 10)
 
 		self.set_point_msg = PoseStamped()
-
+		############################### shared memory variables #############################################
 		self.a = np.array([0.0, 0.0], dtype=np.float64)
-		###############################
+
 		self.shm = shared_memory.SharedMemory(name = 'Local_position', create=False, size=self.a.nbytes)
 		self.local_pos_estimate = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
 		self.new_setpoint = None
@@ -56,7 +59,16 @@ class control_node(Node):
 		self.shm_pkg_coord = shared_memory.SharedMemory(name = 'package_coordinate', create=False, size=self.package_coordinate.nbytes)
 		self.pkg_coord = np.ndarray(self.package_coordinate.shape, dtype=self.package_coordinate.dtype, buffer=self.shm_pkg_coord.buf)
 		
+		self.angle = np.array([0.0], dtype=np.float64)
+		self.shm_yaw_angle = shared_memory.SharedMemory(name = 'yaw_angle', create=False, size=self.angle.nbytes)
+		self.yaw_angle = np.ndarray(self.angle.shape, dtype=self.angle.dtype, buffer=self.shm_yaw_angle.buf)
 
+		resource_tracker.unregister("/Local_position", "shared_memory")
+		resource_tracker.unregister("/flags", "shared_memory")
+		resource_tracker.unregister("/package_coordinate", "shared_memory")
+		resource_tracker.unregister("/yaw_angle", "shared_memory")
+		
+		#####################################################################################################33
 		self.set_point_msg.pose.position.x = 0.1
 		self.set_point_msg.pose.position.y = -0.15
 		self.set_point_msg.pose.position.z = 0.0
@@ -191,29 +203,46 @@ class control_node(Node):
 
 			self.prev_point = self.local_pos_estimate   # array that contains x and y coordinates
 
-			self.goto_target(self.pkg_coord[0],self.pkg_coord[1]-0.10,0.8) ## reduce the height to 0.5  ( fix height based on field of view)
+			self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08,0.8) ## reduce the height to 0.5  ( fix height based on field of view)
 			self.flags_status[3] = True
 			#pose_package = True
 			#pose_publisher pose estimation 
-			self.goto_target(self.pkg_coord[0],self.pkg_coord[1]-0.10,0.5)
-			time.sleep(1)
+			self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08,0.5)
+			time.sleep(5)
+			landing_offset = [0.0,-0.1]
+			# setpoint as rotation
+			rotation_angle = self.yaw_angle[0] + np.pi/4
+			x_offset =  landing_offset[1] * np.sin(rotation_angle)
+			y_offset =  landing_offset[1] * np.cos(rotation_angle)
+			self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08, 0.5, 0,0,self.yaw_angle[0]+np.pi/4)
+			time.sleep(5)
+			self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08, 0.3, 0,0,self.yaw_angle[0]+np.pi/4)
+			time.sleep(5)
 			print('height 0.3 m')
+			# try some extra setpoint before land
+			self.goto_target(self.pkg_coord[0]-0.1, self.pkg_coord[1]-0.1, 0.1, 0,0,self.yaw_angle[0]+np.pi/4)
+
 			# self.goto_target(self.pkg_coord[0],self.pkg_coord[1]-0.10,0.4)
 			# time.sleep(10)
-			self.goto_target(self.pkg_coord[0],self.pkg_coord[1]-0.10,0.1)
+			#self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08,0.1)
 			
-
-
 			self.land()   # normal landing with height reduced
 			#publish package_picked up topic
 
 
 
-	def goto_target(self,x,y,z):
+	def goto_target(self,x,y,z,roll=0,pitch=0,yaw=np.pi/2):
 
 		self.set_point_msg.pose.position.x = x
 		self.set_point_msg.pose.position.y = y
 		self.set_point_msg.pose.position.z = z
+
+		quat = tf.quaternion_from_euler(roll,pitch,yaw)	
+
+		self.set_point_msg.pose.orientation.x = quat[1]
+		self.set_point_msg.pose.orientation.y = quat[2]
+		self.set_point_msg.pose.orientation.z = quat[3]
+		self.set_point_msg.pose.orientation.w = quat[0]
 
 		print('setpoint')
 		self.set_point_msg.header.stamp = self.get_clock().now().to_msg()
@@ -278,9 +307,11 @@ class control_node(Node):
 		del self.local_pos_estimate
 		del self.flags_status
 		del self.pkg_coord
+		del self.yaw_angle
 		self.shm.close()
 		self.shm_flags.close()
 		self.shm_pkg_coord.close()
+		self.shm_yaw_angle.close()
 		print('closed')
 
 def wait_conn(master):

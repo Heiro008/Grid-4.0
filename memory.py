@@ -50,15 +50,22 @@ class control_node(Node):
 		self.shm_pkg_coord_array[:] = self.package_coordinate[:]
 
 
+		self.angle = np.array([0.0], dtype=np.float64)
+		self.shm_yaw_angle = shared_memory.SharedMemory(name = 'yaw_angle', create=True, size=self.angle.nbytes)
+		
+
 	def __del__(self):
 		del self.b
 		del self.shm_pkg_coord_array
+		self.shm_yaw_angle.close()
+		self.shm_yaw_angle.unlink()
 		self.shm.close()
 		self.shm.unlink()
 		self.shm_flags.close()
 		self.shm_flags.unlink()
 		self.shm_pkg_coord.close()
 		self.shm_pkg_coord.unlink()
+
 		print('closed')
 
 			

@@ -13,6 +13,9 @@ from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Float32
 from multiprocessing import shared_memory
+from multiprocessing import resource_tracker
+
+
 
 
 def isRotationMatrix(R):
@@ -57,6 +60,15 @@ class ImageSubscriber(Node):
 		self.package_coordinate = np.array([0.0, 0.0], dtype=np.float64)
 		self.shm_pkg_coord = shared_memory.SharedMemory(name = 'package_coordinate', create=False, size=self.package_coordinate.nbytes)
 		self.pkg_coord = np.ndarray(self.package_coordinate.shape, dtype=self.package_coordinate.dtype, buffer=self.shm_pkg_coord.buf)
+
+		self.angle = np.array([0.0], dtype=np.float64)
+		self.shm_yaw_angle = shared_memory.SharedMemory(name = 'yaw_angle', create=False, size=self.angle.nbytes)
+		self.yaw_angle = np.ndarray(self.angle.shape, dtype=self.angle.dtype, buffer=self.shm_yaw_angle.buf)
+		print(self.pkg_coord)
+		resource_tracker.unregister("/Local_position", "shared_memory")
+		resource_tracker.unregister("/flags", "shared_memory")
+		resource_tracker.unregister("/package_coordinate", "shared_memory")
+		resource_tracker.unregister("/yaw_angle", "shared_memory")
 
 		###########################################################################################################
 
@@ -266,7 +278,7 @@ class ImageSubscriber(Node):
 				camera_origin = tf.translation_from_matrix(inv_transform)
 				camera_quaternion = tf.quaternion_from_euler(np.pi, 0, euler_angles[2])
 				#'sxyz'
-				q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)	
+				q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)	  # yaw subtracted from euler_angle
 				q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
 				q_new = tf.unit_vector(q_new)
 				#q_new.normalize()
@@ -341,6 +353,7 @@ class ImageSubscriber(Node):
 				camera_origin = tf.translation_from_matrix(inv_transform)
 				camera_quaternion = tf.quaternion_from_euler(np.pi, 0, euler_angles[2])
 				#'sxyz'
+				self.yaw_angle[0] = euler_angles[2]
 				q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)
 				q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
 				q_new = tf.unit_vector(q_new)
@@ -374,9 +387,11 @@ class ImageSubscriber(Node):
 		del self.local_pos_estimate
 		del self.flags_status
 		del self.pkg_coord
+		del self.yaw_angle
 		self.shm.close()
 		self.shm_flags.close()
 		self.shm_pkg_coord.close()
+		self.shm_yaw_angle.close()
 		print('closed')
 
 def main(args=None):
