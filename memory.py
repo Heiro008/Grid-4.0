@@ -40,19 +40,25 @@ class control_node(Node):
 		# 1 -> package_coordinate_flag
 		# 2 -> near_package 
 		# 3 -> pose_package
-		self.flags = np.array([0,0,0,0], dtype=np.bool)
+		self.flags = np.array([0,0,0,0], dtype=bool)
 		self.shm_flags = shared_memory.SharedMemory(name = 'flags', create=True, size=self.flags.nbytes)
 		#self.b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
-		self.package_coordinate = np.array([0.0, 0.0], dtype=np.float64)
-		self.shm_pkg_coord = shared_memory.SharedMemory(name = 'package_coordinate', create=True, size=self.package_coordinate.nbytes)
-		#self.b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)	
 
+		self.package_coordinate = np.array([0.74, 0.36], dtype=np.float64)
+		self.shm_pkg_coord = shared_memory.SharedMemory(name = 'package_coordinate', create=True, size=self.package_coordinate.nbytes)
+		self.shm_pkg_coord_array = np.ndarray(self.package_coordinate.shape, dtype=self.package_coordinate.dtype, buffer=self.shm_pkg_coord.buf)	
+		self.shm_pkg_coord_array[:] = self.package_coordinate[:]
 
 
 	def __del__(self):
 		del self.b
+		del self.shm_pkg_coord_array
 		self.shm.close()
 		self.shm.unlink()
+		self.shm_flags.close()
+		self.shm_flags.unlink()
+		self.shm_pkg_coord.close()
+		self.shm_pkg_coord.unlink()
 		print('closed')
 
 			

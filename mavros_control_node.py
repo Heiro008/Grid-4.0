@@ -20,6 +20,7 @@ from mavros import setpoint as sp
 from rclpy.qos import QoSProfile
 from multiprocessing import shared_memory
 from pymavlink import mavutil
+from std_msgs.msg import Bool
 
 class control_node(Node):
 	def __init__(self,master):
@@ -33,6 +34,8 @@ class control_node(Node):
 		# self.local_position
 		self.rc = OverrideRCIn()
 		self.set_point = self.create_publisher(PoseStamped, '/mavros/setpoint_position/local', 1)
+		self.package_picked = self.create_publisher(Bool, '/package_picked_up', 10)
+
 		self.set_point_msg = PoseStamped()
 
 		self.a = np.array([0.0, 0.0], dtype=np.float64)
@@ -41,7 +44,7 @@ class control_node(Node):
 		self.local_pos_estimate = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
 		self.new_setpoint = None
 		
-		self.flags = np.array([0,0,0,0], dtype=np.bool)
+		self.flags = np.array([0,0,0,0], dtype=bool)
 		self.shm_flags = shared_memory.SharedMemory(name = 'flags', create=False, size=self.flags.nbytes)
 		#self.b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
 		self.flags_status = np.ndarray(self.flags.shape, dtype=self.flags.dtype, buffer=self.shm_flags.buf)
@@ -49,11 +52,9 @@ class control_node(Node):
 		# 1 -> package_coordinate_flag
 		# 2 -> near_package 
 		# 3 -> pose_package
-		
-		
 		self.package_coordinate = np.array([0.0, 0.0], dtype=np.float64)
 		self.shm_pkg_coord = shared_memory.SharedMemory(name = 'package_coordinate', create=False, size=self.package_coordinate.nbytes)
-		self.pkg_coord = np.ndarray(self.shm_pkg_coord.shape, dtype=self.shm_pkg_coord.dtype, buffer=self.shm_shm_pkg_coord.buf)
+		self.pkg_coord = np.ndarray(self.package_coordinate.shape, dtype=self.package_coordinate.dtype, buffer=self.shm_pkg_coord.buf)
 		
 
 		self.set_point_msg.pose.position.x = 0.1
@@ -114,72 +115,102 @@ class control_node(Node):
 
 		self.arm_service = self.create_client(CommandBool, '/mavros/cmd/arming')
 		self.change_mode = self.create_client(SetMode, '/mavros/set_mode')
-		self.takeoff = self.create_client(CommandTOL, '/mavros/cmd/takeoff')
+		self.takeoff_service = self.create_client(CommandTOL, '/mavros/cmd/takeoff')
 
 		self.start_navigation()
 
 
-		count = 0
-		
-		
-		target_list = []    ############## to be defined ##############
 		
 #######################################################################################################################
-		for target in target_list:
-			self.goto_target(target[0],target[1],1.0)
-			while not self.flags_status[0]:     # package_detected
-				if self.local_pos_estimate[0]-target[0]<0.05 and self.local_pos_estimate[1]-target[1]<0.05:   # local_point is shared memory
-					break
-			if self.flags_status[0]:
-				self.goto_target(self.local_pos_estimate[0], self.local_pos_estimate[1], 1.0)
-				time.sleep(10)
-				while not self.flags_status[1]:     # package_coordinate_flag
-					pass
-				self.goto_target(self.pkg_coord[0], self.pkg_coord[1], 1.0)
 
-				self.flags_status[1] = False
-				while not self.flags_status[2]:        # near_package  
-					pass
-				self.prev_point = self.local_pos_estimate   # array that contains x and y coordinates
-				self.goto_target(self.prev_point[0],self.prev_point[0],0.8) ## reduce the height to 0.5  ( fix height based on field of view)
-				#pose_package = True
-				#pose_publisher pose estimation 
-				time.sleep(5)
-				self.goto_target(self.prev_point[0],self.prev_point[0],0.7)
-				time.sleep(5)
-				self.goto_target(self.prev_point[0],self.prev_point[0],0.6)
-				time.sleep(5)
-				self.goto_target(self.prev_point[0],self.prev_point[0],0.5)
-				time.sleep(5)
-				self.goto_target(self.prev_point[0],self.prev_point[0],0.4)
-				time.sleep(5)
-				self.goto_target(self.prev_point[0],self.prev_point[0],0.3)
+		# count = 0
+		# target_list = []    ############## to be defined ##############
 
-				self.land()   # normal landing with height reduced
+		# for target in target_list:
+		# 	self.goto_target(target[0],target[1],1.0)
+		# 	while not self.flags_status[0]:     # package_detected_flag
+		# 		if abs(self.local_pos_estimate[0]-target[0])<0.05 and abs(self.local_pos_estimate[1]-target[1])<0.05:   # local_point is shared memory
+		# 			break
+		# 	if self.flags_status[0]:
+		# 		self.goto_target(self.local_pos_estimate[0], self.local_pos_estimate[1], 1.0)
+		# 		time.sleep(10)
+		# 		while not self.flags_status[1]:     # package_coordinate_flag
+		# 			pass
+		# 		self.goto_target(self.pkg_coord[0], self.pkg_coord[1], 1.0)
 
-				#publish package_picked up topic
+		# 		self.flags_status[1] = False
+		# 		while not self.flags_status[2]:        # near_package_flag  
+		# 			pass
+		# 		self.prev_point = self.local_pos_estimate   # array that contains x and y coordinates
+		# 		self.goto_target(self.prev_point[0],self.prev_point[0],0.8) ## reduce the height to 0.5  ( fix height based on field of view)
+		# 		#pose_package = True
+		# 		#pose_publisher pose estimation 
+		# 		time.sleep(5)
+		# 		self.goto_target(self.prev_point[0],self.prev_point[0],0.7)
+		# 		time.sleep(5)
+		# 		self.goto_target(self.prev_point[0],self.prev_point[0],0.3)
+		# 		time.sleep(10)
 
-				pose_package = False
 
-				count += 1
-				self.package_drop_routine(self.prev_point,count)  # drop and then come back to previous point
-				time.sleep(20)
-				package_detected = False
+		# 		self.land()   # normal landing with height reduced
+		# 		#publish package_picked up topic
+		# 		for i in range(5):
+		# 			package_picked_msg = Bool()
+		# 			package_picked_msg.data = True
+		# 			self.package_picked.publish(package_picked_msg)
+				
+
+		# 		pose_package = False
+
+		# 		count += 1
+		# 		self.package_drop_routine(self.prev_point,count)  # drop and then come back to previous point
+		# 		time.sleep(20)
+		# 		package_detected = False
 
 #######################################################################################################################
-
-
 
 
 	def start_navigation(self):
 		self.takeoff(0.5)
 		time.sleep(10)
 		self.goto_target(0.1,-0.15,1.0)
-		time.sleep(5)
+		time.sleep(10)
+		self.goto_target(self.pkg_coord[0],self.pkg_coord[1]-0.10,1.0)
+		time.sleep(10)
+		self.flags_status[0] = True
+		while not self.flags_status[0]:     # package_detected_flag
+			if abs(self.local_pos_estimate[0]-target[0])<0.05 and abs(self.local_pos_estimate[1]-target[1])<0.05:   # local_point is shared memory
+				break
+		if self.flags_status[0]:      # package_detected_flag
+	
+			self.flags_status[1] = False
+			print('waiting for near_package')
+			while not self.flags_status[2]:        # near_package_flag  
+				pass
+			self.flags_status[2] = True
+
+			self.prev_point = self.local_pos_estimate   # array that contains x and y coordinates
+
+			self.goto_target(self.pkg_coord[0],self.pkg_coord[1]-0.10,0.8) ## reduce the height to 0.5  ( fix height based on field of view)
+			self.flags_status[3] = True
+			#pose_package = True
+			#pose_publisher pose estimation 
+			self.goto_target(self.pkg_coord[0],self.pkg_coord[1]-0.10,0.5)
+			time.sleep(1)
+			print('height 0.3 m')
+			# self.goto_target(self.pkg_coord[0],self.pkg_coord[1]-0.10,0.4)
+			# time.sleep(10)
+			self.goto_target(self.pkg_coord[0],self.pkg_coord[1]-0.10,0.1)
+			
+
+
+			self.land()   # normal landing with height reduced
+			#publish package_picked up topic
 
 
 
 	def goto_target(self,x,y,z):
+
 		self.set_point_msg.pose.position.x = x
 		self.set_point_msg.pose.position.y = y
 		self.set_point_msg.pose.position.z = z
@@ -210,15 +241,16 @@ class control_node(Node):
 
 		time.sleep(2)
 
-		while not self.takeoff.wait_for_service(timeout_sec=1):
+		while not self.takeoff_service.wait_for_service(timeout_sec=1):
 			self.get_logger().info('service not available, waiting again...')
 		req = CommandTOL.Request()
 		req.altitude = height
-		resp = self.takeoff.call_async(req)
+		resp = self.takeoff_service.call_async(req)
 		rclpy.spin_until_future_complete(self, resp)
 		print('takeoff')
 
 	def land(self):
+
 		print('landing')
 		while not self.change_mode.wait_for_service(timeout_sec=1):
 			self.get_logger().info('service not available, waiting again...')
@@ -233,7 +265,6 @@ class control_node(Node):
 		##
 
 		pass
-		if count==2:
 			## after dropping the package
 			## goto_(landind_pad_coordinate)
 		##
@@ -245,7 +276,11 @@ class control_node(Node):
 
 	def __del__(self):   # distructor
 		del self.local_pos_estimate
+		del self.flags_status
+		del self.pkg_coord
 		self.shm.close()
+		self.shm_flags.close()
+		self.shm_pkg_coord.close()
 		print('closed')
 
 def wait_conn(master):
