@@ -102,13 +102,13 @@ class ImageSubscriber(Node):
 		self.arucoDict_package = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_250)
 		self.arucoParams = cv2.aruco.DetectorParameters_create()
 
-		###########################################
+		##########################################################################################################
 		self.matrix_coefficients = np.array( [[472.46389744  , 0.      ,   265.15033673],
  									[  0.    ,     473.06566789 ,285.9249716 ],
  									[  0.    ,       0.   ,        1.        ]] )
 
 		self.distortion_coefficients = np.array([[-0.39297927,  0.148505,   -0.00703395,  0.01307684 ,-0.03332911]])
-		###########################################
+		############################################################################################################
 		self.tag_length = 0.055  # in metres, length of one marker on the board
 		self.tag_separation = 0.008   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
 		#self.board = cv2.aruco.GridBoard_create(4, 3, self.tag_length, self.tag_separation, self.arucoDict)
@@ -125,14 +125,14 @@ class ImageSubscriber(Node):
 			        # last number = id of the first marker in the gridboard! very important.
 			self.board_details[i] = [[j for j in range(12*i, 12*(i+1))], None, None, None, None]
 		
-		######## CHECK THESE VALUES ###########################
+		######## CHECK THESE VALUES ###########################################
 		self.board_details[0][1] = (0,0)
 		self.board_details[1][1] = (119.5/100, 0)
 		self.board_details[2][1] = (0, 95.3/100)
 		self.board_details[3][1] = (119.5/100, 95.3/100)		# 189.5
 		self.board_details[4][1] = (0, 189.5/100)
 		self.board_details[5][1] = (119.5/100, 189.5/100)
-		#######################################################
+		###########################################################################3
 			
 	def update_height(self,data):
 		self.height = float(data.data/100)

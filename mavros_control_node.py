@@ -38,8 +38,8 @@ class control_node(Node):
 		self.rc = OverrideRCIn()
 		self.set_point = self.create_publisher(PoseStamped, '/mavros/setpoint_position/local', 1)
 		self.package_picked = self.create_publisher(Bool, '/package_picked_up', 10)
-
 		self.set_point_msg = PoseStamped()
+
 		############################### shared memory variables #############################################
 		self.a = np.array([0.0, 0.0], dtype=np.float64)
 
@@ -67,7 +67,7 @@ class control_node(Node):
 		resource_tracker.unregister("/flags", "shared_memory")
 		resource_tracker.unregister("/package_coordinate", "shared_memory")
 		resource_tracker.unregister("/yaw_angle", "shared_memory")
-		
+
 		#####################################################################################################33
 		self.set_point_msg.pose.position.x = 0.1
 		self.set_point_msg.pose.position.y = -0.15
@@ -183,6 +183,7 @@ class control_node(Node):
 
 
 	def start_navigation(self):
+		self.flags_status[3] = False   # pose_package_flag
 		self.takeoff(0.5)
 		time.sleep(10)
 		self.goto_target(0.1,-0.15,1.0)
@@ -203,32 +204,49 @@ class control_node(Node):
 
 			self.prev_point = self.local_pos_estimate   # array that contains x and y coordinates
 
-			self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08,0.8) ## reduce the height to 0.5  ( fix height based on field of view)
-			self.flags_status[3] = True
+			self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1,0.8) ## reduce the height to 0.5  ( fix height based on field of view)
+			self.flags_status[3] = True   # pose_package_flag
 			#pose_package = True
 			#pose_publisher pose estimation 
-			self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08,0.5)
+			self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1,0.5)
 			time.sleep(5)
 			landing_offset = [0.0,-0.1]
 			# setpoint as rotation
 			rotation_angle = self.yaw_angle[0] + np.pi/4
 			x_offset =  landing_offset[1] * np.sin(rotation_angle)
 			y_offset =  landing_offset[1] * np.cos(rotation_angle)
-			self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08, 0.5, 0,0,self.yaw_angle[0]+np.pi/4)
+			self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1, 0.5, 0,0,rotation_angle)
 			time.sleep(5)
-			self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08, 0.3, 0,0,self.yaw_angle[0]+np.pi/4)
+
+			while True:     # package_detected_flag
+				if abs(self.local_pos_estimate[0]-self.pkg_coord[0]-0.1)<0.05 and abs(self.local_pos_estimate[1]-self.pkg_coord[1]-0.1)<0.05:   # local_point is shared memory
+					print('loop terminated')
+					self.land()
+					break
+
+
+			self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1, 0.4, 0,0,rotation_angle)
+			time.sleep(5)
+			self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1, 0.3, 0,0,rotation_angle)
 			time.sleep(5)
 			print('height 0.3 m')
 			# try some extra setpoint before land
-			self.goto_target(self.pkg_coord[0]-0.1, self.pkg_coord[1]-0.1, 0.1, 0,0,self.yaw_angle[0]+np.pi/4)
+			#self.goto_target(self.pkg_coord[0]-0.1, self.pkg_coord[1]-0.1, 0.1, 0,0,self.yaw_angle[0]+np.pi/4)
 
 			# self.goto_target(self.pkg_coord[0],self.pkg_coord[1]-0.10,0.4)
 			# time.sleep(10)
-			#self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08,0.1)
+			# self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08,0.1)
 			
 			self.land()   # normal landing with height reduced
+			time.sleep(5)
 			#publish package_picked up topic
+			self.flags_status[3] = False   # pose_package_flag
 
+			self.takeoff(1.0)
+			time.sleep(10)
+			self.goto_target(0.1,-0.15,1.0)
+			time.sleep(10)
+			self.land()
 
 
 	def goto_target(self,x,y,z,roll=0,pitch=0,yaw=np.pi/2):
@@ -294,6 +312,19 @@ class control_node(Node):
 		##
 
 		pass
+		self.takeoff(1.0)
+		time.sleep(10)
+		self.goto_target() # drop_zone targer
+		time.sleep(20)
+		# release electromagnet
+		for i in range(5):
+			package_picked_msg = Bool()
+			package_picked_msg.data = True
+			self.package_picked.publish(package_picked_msg)
+		time.sleep(5)
+		self.goto_target(prev_point[0],prev_point[1],1.0)
+		time.sleep(20)
+
 			## after dropping the package
 			## goto_(landind_pad_coordinate)
 		##
@@ -333,7 +364,7 @@ def wait_conn(master):
 
 
 def main(args=None):
-	master = mavutil.mavlink_connection('udpout:192.168.252.218:14590')
+	master = mavutil.mavlink_connection('udpout:192.168.186.218:14590')
 	#master = mavutil.mavlink_connection("/dev/ttyACM0", baud=115200)
 	print('waiting')
 	#master.wait_heartbeat()
