@@ -91,7 +91,7 @@ class ImageSubscriber(Node):
 		self.camera_pose_msg.pose.orientation.y = 0.0
 		self.camera_pose_msg.pose.orientation.z = 0.7071 
 		self.camera_pose_msg.pose.orientation.w = 0.7071
-
+		self.offset_yaw = None
 
 		self.br = CvBridge()
 		self.image_data = None
@@ -114,7 +114,7 @@ class ImageSubscriber(Node):
 		#self.board = cv2.aruco.GridBoard_create(4, 3, self.tag_length, self.tag_separation, self.arucoDict)
 		        # first number = no. of columns of markers in the board
 		        # second number = no. of rows of markers in the board
-		
+		self.tag_length_package = 0.058
 		self.no_of_boards = 8
 		self.boards = []
 		self.board_details = {}
@@ -173,9 +173,9 @@ class ImageSubscriber(Node):
 		rvec = None
 
 		# if 0 in ids_package:
-		# 	package_detected = True
-		# package_detected, corners_color_package = detect_packages(image)
-		
+		# 	package_detected = True   
+		#self.flags_status[0] , corners_package = self.detect_get_pkg_corners(image)   # package_detected_flag
+		 
 		if len(corners) > 6 and not self.flags_status[3]:   # or ids!=None
 
 			self.change_pose_count = 0      # reset the counter if normal board is detected
@@ -227,7 +227,7 @@ class ImageSubscriber(Node):
 					if self.board_details[i][4] <= min_dis:
 						min_dis = self.board_details[i][4]
 						board_selected = i		
-				
+			
 				
 				#ret_val_list.append(ret_val)
 				#rvec_list.append(rvec)
@@ -235,7 +235,26 @@ class ImageSubscriber(Node):
 
 			#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients, self.distortion_coefficients, tvec, rvec)
 			if board_selected!=None:
-				
+
+				# if self.flags_status[0] and not self.flags_status[1]:   # package_detected_flag  and  package_coodinate_flag
+				# 	########## tvec of 1st marker of board and tvec of package marker  ##################
+				# 	rvec_tmp, tvec_tmp, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners_split[board_selected][0], self.tag_length, self.matrix_coefficients,self.distortion_coefficients)
+				# 	id_tmp = ids_split[board_selected][0]
+				# 	rvec_pkg, tvec_psg, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners_package, self.tag_length_package, self.matrix_coefficients,self.distortion_coefficients)
+				# 	j = (id_tmp%12)
+				# 	col = j % 4
+				# 	row = j // 4
+
+				# 	marker_offset_wrt_board_x = col*(self.tag_length + self.tag_separation) + self.tag_length/2
+				# 	marker_offset_wrt_board_y = row*(self.tag_length + self.tag_separation) + self.tag_length/2
+
+				# 	offset_x = tvec_pkg[0] - (tvec_tmp[0] - marker_offset_wrt_board_x)
+				# 	offset_y = tvec_pkg[1] - (tvec_tmp[1] - marker_offset_wrt_board_y)
+				# 	offset_x  += self.board_details[board_selected][4][0]
+				# 	offset_y  += self.board_details[board_selected][4][1]
+				# 	self.pkg_coord[0] = offset_x
+				# 	self.pkg_coord[1] = offset_y
+				# 	self.flags_status[1] = True   # package_coodinate_flag
 				# Draw a square around the markers
 				cv2.aruco.drawDetectedMarkers(image, corners_split[board_selected], ids_split[board_selected], (0,255,0)) 
 				
@@ -297,7 +316,7 @@ class ImageSubscriber(Node):
 
 				self.camera_pose.publish(self.camera_pose_msg)
 				print(self.pkg_coord)
-				if abs(self.pkg_coord[0] - camera_origin[0]) < 0.1 and abs(self.pkg_coord[1] - camera_origin[1]) < 0.1:
+				if abs(self.pkg_coord[0] - camera_origin[0]) < 0.05 and abs(self.pkg_coord[1] - camera_origin[1]) < 0.05:
 					self.flags_status[2] = True  #  near_package_flag
 					print('near_package_set')
 
@@ -322,55 +341,62 @@ class ImageSubscriber(Node):
 
 
 	def publish_pose_based_on_marker(self,image):
-		tag_length = 0.08
-		(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict_package,parameters=self.arucoParams)
+		tag_length = 0.058
+		#(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict_package,parameters=self.arucoParams)
+
+		detected , corners = self.detect_get_pkg_corners(image)
 		tvec = None
 		rvec = None
-		if len(corners)>0:
-			for i in range(0, len(ids)):
-            	# Estimate pose of each marker and return the values rvec and tvec---(different from those of camera coefficients)
-				rvec, tvec, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners[i], tag_length, self.matrix_coefficients,self.distortion_coefficients)
-				#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients,self.distortion_coefficients,tvec,rvec)
-	        	
-	        	# Draw a square around the markers
-				cv2.aruco.drawDetectedMarkers(image, corners) 
-				#print(rvec[i][0])
-				rot_mat = cv2.Rodrigues(rvec[0][0])
-				euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
-				p_quat = Quaternion()
-				p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
-				p_quat.w = p_quat_raw[0]		
-				p_quat.x = p_quat_raw[1]
-				p_quat.y = p_quat_raw[2]
-				p_quat.z = p_quat_raw[3]
-				#p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
-			
-				self.object_pose_msg.pose.orientation = p_quat
-				self.object_pose.publish(self.object_pose_msg)
+		if detected:
+			#for i in range(0, len(ids)):
+        	# Estimate pose of each marker and return the values rvec and tvec---(different from those of camera coefficients)
+			rvec, tvec, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners[0], tag_length, self.matrix_coefficients,self.distortion_coefficients)
+			#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients,self.distortion_coefficients,tvec,rvec)
+        	
+        	# Draw a square around the markers
+			cv2.aruco.drawDetectedMarkers(image, corners) 
+			#print(rvec[i][0])
+			rot_mat = cv2.Rodrigues(rvec[0][0])
+			euler_angles = rotationMatrixToEulerAngles(rot_mat[0])
+			p_quat = Quaternion()
+			p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
+			p_quat.w = p_quat_raw[0]		
+			p_quat.x = p_quat_raw[1]
+			p_quat.y = p_quat_raw[2]
+			p_quat.z = p_quat_raw[3]
+			#p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
+		
+			self.object_pose_msg.pose.orientation = p_quat
+			self.object_pose.publish(self.object_pose_msg)
 
-				transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
-				inv_transform = tf.inverse_matrix(transform)
-				camera_origin = tf.translation_from_matrix(inv_transform)
-				camera_quaternion = tf.quaternion_from_euler(np.pi, 0, euler_angles[2])
-				#'sxyz'
-				self.yaw_angle[0] = euler_angles[2]
-				q_rot = tf.quaternion_from_euler(np.pi,0,np.pi*1.5)
-				q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
-				q_new = tf.unit_vector(q_new)
-				#q_new.normalize()
-				self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
-				self.camera_pose_msg.header.frame_id = 'map'
-				self.camera_pose_msg.pose.position.x = camera_origin[0]  + self.pkg_coord[0]
-				self.camera_pose_msg.pose.position.y = camera_origin[1]  + self.pkg_coord[1] 
-				self.camera_pose_msg.pose.position.z = camera_origin[2]
-				self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
-				self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
-				self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
-				self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
-				#self.camera_pose_msg.pose.position = self.object_pose_msg.pose.position
-				self.camera_pose.publish(self.camera_pose_msg)
+			transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
+			inv_transform = tf.inverse_matrix(transform)
+			camera_origin = tf.translation_from_matrix(inv_transform)
+			camera_quaternion = tf.quaternion_from_euler(np.pi, 0, euler_angles[2])
+			#'sxyz'
 
-				cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
+			self.yaw_angle[0] = euler_angles[2]
+			# if self.offset_yaw == None:
+			# 	self.offset_yaw = euler_angles[2]
+			# 	self.yaw_angle[0] = euler_angles[2]
+
+			q_rot = tf.quaternion_from_euler(np.pi,0, np.pi*1.5) #+self.offset_yaw  # determine +/- after testing
+			q_new = tf.quaternion_multiply(q_rot,camera_quaternion)
+			q_new = tf.unit_vector(q_new)
+			#q_new.normalize()
+			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
+			self.camera_pose_msg.header.frame_id = 'map'
+			self.camera_pose_msg.pose.position.x = camera_origin[0]  + self.pkg_coord[0]
+			self.camera_pose_msg.pose.position.y = camera_origin[1]  + self.pkg_coord[1] 
+			self.camera_pose_msg.pose.position.z = camera_origin[2]
+			self.camera_pose_msg.pose.orientation.x = -q_new[2]  # y value
+			self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
+			self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
+			self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
+			#self.camera_pose_msg.pose.position = self.object_pose_msg.pose.position
+			self.camera_pose.publish(self.camera_pose_msg)
+
+			cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
 		else:
 
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
@@ -381,6 +407,19 @@ class ImageSubscriber(Node):
 
 		cv2.imshow("image", image)
 		key = cv2.waitKey(1)
+
+	def detect_get_pkg_corners(self,image):
+		(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict_package,parameters=self.arucoParams)
+		if len(ids)>0:
+			return True , corners
+		else:
+			## color segmentation and detecting contours
+			## chech if color is there...
+			## if color detected na 
+			## segment and find contours and return True, corners
+			## else return False, None
+			return False, None
+
 
 
 	def __del__(self):   # distructor

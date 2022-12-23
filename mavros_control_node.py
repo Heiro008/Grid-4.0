@@ -154,30 +154,46 @@ class control_node(Node):
 		# 		while not self.flags_status[2]:        # near_package_flag  
 		# 			pass
 		# 		self.prev_point = self.local_pos_estimate   # array that contains x and y coordinates
-		# 		self.goto_target(self.prev_point[0],self.prev_point[0],0.8) ## reduce the height to 0.5  ( fix height based on field of view)
-		# 		#pose_package = True
+		# 		self.goto_target(self.pkg_coord[0],self.pkg_coord[1],0.8)
+		# 		time.sleep(1)
+		# 		self.flags_status[3] = True   # pose_package_flag
 		# 		#pose_publisher pose estimation 
+		# 		self.goto_target(self.pkg_coord[0],self.pkg_coord[1],0.5)
 		# 		time.sleep(5)
-		# 		self.goto_target(self.prev_point[0],self.prev_point[0],0.7)
+		# 		landing_offset = [0.0,-0.1]
+		# 		# setpoint as rotation
+		# 		rotation_angle = self.yaw_angle[0] + np.pi/4
+		# 		rotation_angle = (self.yaw_angle[0] % np.pi/2) - np.pi/4
+
+		# 		x_offset =  landing_offset[1] * np.sin(rotation_angle) 
+		# 		y_offset =  landing_offset[1] * np.cos(rotation_angle)
+
+		# 		self.goto_target(self.pkg_coord[0], self.pkg_coord[1], 0.4, 0,0,rotation_angle)
 		# 		time.sleep(5)
-		# 		self.goto_target(self.prev_point[0],self.prev_point[0],0.3)
-		# 		time.sleep(10)
+		# 		#self.goto_target(self.pkg_coord[0]-0.08, self.pkg_coord[1]-0.08, 0.4, 0,0,rotation_angle)
 
-
+		# 		while True:     # package_detected_flag
+		# 			if abs(self.local_pos_estimate[0]-(self.pkg_coord[0]))<0.015 and abs(self.local_pos_estimate[1]-(self.pkg_coord[1]))<0.015:   # local_point is shared memory
+		# 				self.goto_target(self.pkg_coord[0]-0.08, self.pkg_coord[1]-0.08, 0.1, 0,0,rotation_angle)
+		# 				time.sleep(1)
+		# 				self.land()
+		# 				break
+		# 			time.sleep(0.01)
+		# 		print('height 0.3 m')
 		# 		self.land()   # normal landing with height reduced
-		# 		#publish package_picked up topic
+
 		# 		for i in range(5):
 		# 			package_picked_msg = Bool()
 		# 			package_picked_msg.data = True
 		# 			self.package_picked.publish(package_picked_msg)
-				
 
-		# 		pose_package = False
-
+		# 		self.flags_status[3] = False   # pose_package_flag
 		# 		count += 1
 		# 		self.package_drop_routine(self.prev_point,count)  # drop and then come back to previous point
 		# 		time.sleep(20)
 		# 		package_detected = False
+		# 		if count == 2:
+		# 			break
 
 #######################################################################################################################
 
@@ -204,31 +220,41 @@ class control_node(Node):
 
 			self.prev_point = self.local_pos_estimate   # array that contains x and y coordinates
 
-			self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1,0.8) ## reduce the height to 0.5  ( fix height based on field of view)
+			self.goto_target(self.pkg_coord[0],self.pkg_coord[1],1.0) ## reduce the height to 0.5  ( fix height based on field of view)
+			time.sleep(1)
+			self.goto_target(self.pkg_coord[0],self.pkg_coord[1],0.8)
+			time.sleep(1)
 			self.flags_status[3] = True   # pose_package_flag
 			#pose_package = True
 			#pose_publisher pose estimation 
-			self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1,0.5)
+			self.goto_target(self.pkg_coord[0],self.pkg_coord[1],0.5)
 			time.sleep(5)
 			landing_offset = [0.0,-0.1]
 			# setpoint as rotation
 			rotation_angle = self.yaw_angle[0] + np.pi/4
-			x_offset =  landing_offset[1] * np.sin(rotation_angle)
+			rotation_angle = np.pi/2 + ((self.yaw_angle[0] % (np.pi/2)) - np.pi/4)   # check code: 90 + np.degrees(np.radians(30)%(np.pi/2) - np.pi/4)
+
+			x_offset =  landing_offset[1] * np.sin(rotation_angle) 
 			y_offset =  landing_offset[1] * np.cos(rotation_angle)
-			self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1, 0.5, 0,0,rotation_angle)
+			print('rotation_angle',np.degrees(rotation_angle),'offsets',x_offset,y_offset)
+			
+			self.goto_target(self.pkg_coord[0], self.pkg_coord[1], 0.4, 0,0, np.pi/4)
+			time.sleep(5)
+			#self.goto_target(self.pkg_coord[0]-0.08, self.pkg_coord[1]-0.08, 0.4, 0,0,rotation_angle)
 			time.sleep(5)
 
 			while True:     # package_detected_flag
-				if abs(self.local_pos_estimate[0]-self.pkg_coord[0]-0.1)<0.05 and abs(self.local_pos_estimate[1]-self.pkg_coord[1]-0.1)<0.05:   # local_point is shared memory
-					print('loop terminated')
+				if abs(self.local_pos_estimate[0]-(self.pkg_coord[0]))<0.015 and abs(self.local_pos_estimate[1]-(self.pkg_coord[1]))<0.015:   # local_point is shared memory
+					self.goto_target(self.pkg_coord[0]-0.08, self.pkg_coord[1]-0.08, 0.1, 0,0,np.pi/4)
+					time.sleep(1)
 					self.land()
 					break
+				time.sleep(0.01)
 
-
-			self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1, 0.4, 0,0,rotation_angle)
-			time.sleep(5)
-			self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1, 0.3, 0,0,rotation_angle)
-			time.sleep(5)
+			# self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1, 0.4, 0,0,rotation_angle)
+			# time.sleep(5)
+			# self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1, 0.3, 0,0,rotation_angle)
+			# time.sleep(5)
 			print('height 0.3 m')
 			# try some extra setpoint before land
 			#self.goto_target(self.pkg_coord[0]-0.1, self.pkg_coord[1]-0.1, 0.1, 0,0,self.yaw_angle[0]+np.pi/4)
@@ -238,7 +264,14 @@ class control_node(Node):
 			# self.goto_target(self.pkg_coord[0]-0.08,self.pkg_coord[1]-0.08,0.1)
 			
 			self.land()   # normal landing with height reduced
+
+			for i in range(5):
+				package_picked_msg = Bool()
+				package_picked_msg.data = True
+				self.package_picked.publish(package_picked_msg)
+
 			time.sleep(5)
+
 			#publish package_picked up topic
 			self.flags_status[3] = False   # pose_package_flag
 
@@ -247,6 +280,12 @@ class control_node(Node):
 			self.goto_target(0.1,-0.15,1.0)
 			time.sleep(10)
 			self.land()
+			time.sleep(10)
+			for i in range(5):
+				package_picked_msg = Bool()
+				package_picked_msg.data = False
+				self.package_picked.publish(package_picked_msg)
+
 
 
 	def goto_target(self,x,y,z,roll=0,pitch=0,yaw=np.pi/2):
@@ -307,22 +346,25 @@ class control_node(Node):
 		rclpy.spin_until_future_complete(self, resp)
 		print('Landed')
 
-	def package_drop_routine(self,prev_point):
+	def package_drop_routine(self,prev_point,count):
 
 		##
 
 		pass
 		self.takeoff(1.0)
 		time.sleep(10)
-		self.goto_target() # drop_zone targer
+		self.goto_target() # drop_zone target
 		time.sleep(20)
 		# release electromagnet
 		for i in range(5):
 			package_picked_msg = Bool()
-			package_picked_msg.data = True
+			package_picked_msg.data = False
 			self.package_picked.publish(package_picked_msg)
 		time.sleep(5)
-		self.goto_target(prev_point[0],prev_point[1],1.0)
+		if count == 2:
+			self.goto_target()  # landing pad coordinates
+		else:	
+			self.goto_target(prev_point[0],prev_point[1],1.0)
 		time.sleep(20)
 
 			## after dropping the package

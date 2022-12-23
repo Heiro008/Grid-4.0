@@ -4,6 +4,7 @@ from pymavlink import mavutil
 import rclpy
 from std_msgs.msg import Float32
 from rclpy.node import Node
+from std_msgs.msg import Bool
 
 #GPIO Mode (BOARD / BCM)
 GPIO.setmode(GPIO.BCM)
@@ -37,8 +38,8 @@ wait_conn()
 GPIO.setup(GPIO_TRIGGER, GPIO.OUT)
 GPIO.setup(GPIO_ECHO, GPIO.IN)
 GPIO.setup(GPIO_MAGNET, GPIO.OUT)
-print('on')
-GPIO.output(GPIO_MAGNET, True)
+GPIO.output(GPIO_MAGNET, False)
+
 
 
 
@@ -84,41 +85,62 @@ def distance():
 class range_finder(Node):
     def __init__(self):
         super().__init__('range_finder')
+
         self.range_pub = self.create_publisher(Float32,"/range_finder/ultrasonic",10)
+        self.package_picked = self.create_subscription(Bool, '/package_picked_up',self.magnet_control, 10)
+        self.package_picked
+
         self.msg = Float32()
         self.prev_dist = 0
         self.count = 0
         self.dist = 0
-        #self.create_timer(0.05, self.callback)
+        self.create_timer(0.05, self.callback)
+
+
+    def magnet_control(self,data):
+        print(data.data)
+        if data.data:
+            GPIO.output(GPIO_MAGNET, True)
+        else:
+            GPIO.output(GPIO_MAGNET, False)
+            
+    def callback(self):
         try:
-            while True:
-                self.dist = abs(distance())
-                print ("Measured raw Distance = %.1f cm" % self.dist)
-                if self.dist>400:
-                    self.dist = self.prev_dist
-                if abs(self.dist-self.prev_dist)>30 and self.count<7:
-                    self.dist = self.prev_dist
-                    self.count+=1
-                else:
-                    self.count = 0
-                    self.prev_dist = self.dist
-                print ("Measured Distance = %.1f cm" % self.dist)
-                time.sleep(0.05)    
-                self.msg.data = float(self.dist)
+            #print(self.package_picked)
+            self.dist = abs(distance())
+            #print ("Measured raw Distance = %.1f cm" % self.dist)
+            if self.dist>400:
+                self.dist = self.prev_dist
+            if abs(self.dist-self.prev_dist)>30 and self.count<7:
+                self.dist = self.prev_dist
+                self.count+=1
+            else:
+                self.count = 0
+                self.prev_dist = self.dist
+            print ("Measured Distance = %.1f cm" % self.dist)
+            #time.sleep(0.05)    
+            self.msg.data = float(self.dist)
 
-                self.range_pub.publish(self.msg)
+            self.range_pub.publish(self.msg)
 
-                master.mav.distance_sensor_send(time_boot_ms=int((time.time()-start_time)*1000),
-                    min_distance=0,
-                    max_distance=200,
-                    current_distance=int(self.dist),
-                    type=1,id=1,orientation=25,covariance=255)
+            master.mav.distance_sensor_send(time_boot_ms=int((time.time()-start_time)*1000),
+                min_distance=0,
+                max_distance=200,
+                current_distance=int(self.dist),
+                type=1,id=1,orientation=25,covariance=255)
         except KeyboardInterrupt:
 
             GPIO.output(GPIO_MAGNET, False)
             print('off')
             print("Measurement stopped by User")
             GPIO.cleanup()
+
+
+    def __del__(self):
+        GPIO.output(GPIO_MAGNET, False)
+        #print('off')
+        print("Measurement stopped by User")
+        GPIO.cleanup()
 
 def main(args=None):
     rclpy.init(args=args)
