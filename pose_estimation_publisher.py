@@ -85,14 +85,17 @@ class ImageSubscriber(Node):
 		self.set_point_msg = PoseStamped()
 		self.imgae_header = 0
 		self.camera_pose_msg.pose.position.x = (170.1+10)/100
-		self.camera_pose_msg.pose.position.y = (-88.8-15)/100
+		self.camera_pose_msg.pose.position.y = (-88-15)/100
 		self.camera_pose_msg.pose.position.z = 0.0
 		self.camera_pose_msg.pose.orientation.x = 0.0
 		self.camera_pose_msg.pose.orientation.y = 0.0
 		self.camera_pose_msg.pose.orientation.z = 0.7071 
 		self.camera_pose_msg.pose.orientation.w = 0.7071
 		self.offset_yaw = None
-
+		self.offset_pitch = None
+		self.offset_roll = None
+		self.q_rot_offset = None
+		self.prev_yaw_angle = None
 		self.br = CvBridge()
 		self.image_data = None
 		
@@ -108,6 +111,12 @@ class ImageSubscriber(Node):
  									[  0.    ,       0.   ,        1.        ]] )
 
 		self.distortion_coefficients = np.array([[-0.39297927,  0.148505,   -0.00703395,  0.01307684 ,-0.03332911]])
+
+		self.matrix_coefficients = np.array(  [[432.68955569 ,  0.       ,  327.94237612],
+										 [  0.        , 432.12302131 ,245.54538111],
+ 									[  0.  ,         0.    ,       1.        ]]  )
+
+		self.distortion_coefficients = np.array( [[-3.89046329e-01 , 1.80504834e-01 , 2.65083029e-05,  8.39683505e-06 , -4.45792442e-02]])
 		############################################################################################################
 		self.tag_length = 0.055  # in metres, length of one marker on the board
 		self.tag_separation = 0.008   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
@@ -168,7 +177,7 @@ class ImageSubscriber(Node):
 		#cv2.waitKey(1)
 		
 	def main_process(self,image):
-
+		# self.flags_status[3] = True
 		# self.flags_status[0] = True
 		#self.flags_status[1] = False
 		(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict, parameters=self.arucoParams)
@@ -182,7 +191,7 @@ class ImageSubscriber(Node):
 
 		# if 0 in ids_package:
 		# 	package_detected = True   
-		self.flags_status[0] , package_corners = self.detect_get_pkg_corners(image)   # package_detected_flag
+		self.flags_status[0] , package_corners, package_tag_length = self.detect_get_pkg_corners(image)   # package_detected_flag
 		 
 		if len(corners) > 6 and not self.flags_status[3]:   # or ids!=None
 
@@ -248,7 +257,7 @@ class ImageSubscriber(Node):
 					########## tvec of 1st marker of board and tvec of package marker  ##################
 					rvec_tmp, tvec_tmp, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners_split[board_selected][0], self.tag_length, self.matrix_coefficients,self.distortion_coefficients)
 					id_tmp = ids_split[board_selected][0]
-					rvec_pkg, tvec_pkg, markerPoints = cv2.aruco.estimatePoseSingleMarkers(package_corners, self.tag_length_package, self.matrix_coefficients,self.distortion_coefficients)
+					rvec_pkg, tvec_pkg, markerPoints = cv2.aruco.estimatePoseSingleMarkers(package_corners, package_tag_length, self.matrix_coefficients,self.distortion_coefficients)
 					j = (id_tmp%12)
 					col = j % 4
 					row = j // 4
@@ -369,11 +378,12 @@ class ImageSubscriber(Node):
 		tag_length = 0.058
 		#(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict_package,parameters=self.arucoParams)
 
-		detected , corners = self.detect_get_pkg_corners(image)
+		detected , corners, tag_length = self.detect_get_pkg_corners(image)
 		tvec = None
 		rvec = None
 		if detected:
 			#for i in range(0, len(ids)):
+
         	# Estimate pose of each marker and return the values rvec and tvec---(different from those of camera coefficients)
 			rvec, tvec, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners[0], tag_length, self.matrix_coefficients,self.distortion_coefficients)
 			#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients,self.distortion_coefficients,tvec,rvec)
@@ -387,7 +397,16 @@ class ImageSubscriber(Node):
 			self.yaw_angle[0] = euler_angles[2]
 			if self.offset_yaw == None:
 				self.offset_yaw = euler_angles[2]
+				self.offset_pitch = euler_angles[1]
+				self.offset_roll = euler_angles[0]
+				self.prev_yaw_angle = euler_angles[2] 
+				self.q_rot_offset = tf.quaternion_from_euler(0,0,self.offset_yaw)
+				print('offset angle', np.degrees(self.offset_yaw))
 
+			
+
+
+			
 			p_quat = Quaternion()
 			p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
 			p_quat.w = p_quat_raw[0]		
@@ -395,10 +414,38 @@ class ImageSubscriber(Node):
 			p_quat.y = p_quat_raw[2]
 			p_quat.z = p_quat_raw[3]
 			#p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
-		
-			euler_angles[2] = euler_angles[2] - self.offset_yaw
 
-			transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
+
+			if self.prev_yaw_angle - euler_angles[2]  > np.radians(80):
+				print('shifted1')
+				#self.q_rot_offset = tf.quaternion_from_euler(0,0,self.offset_yaw-(np.pi/2))
+				#self.prev_yaw_angle = euler_angles[2] - np.pi/2
+				#self.q_rot_offset = tf.quaternion_from_euler(0,0,self.offset_yaw)
+				self.offset_yaw -= np.pi/2
+				#euler_angles[2] = euler_angles[2] - self.offset_yaw
+			elif self.prev_yaw_angle - euler_angles[2]  < -np.radians(80):
+				print('shifted2')
+				#self.q_rot_offset = tf.quaternion_from_euler(0,0,self.offset_yaw-(np.pi/2)-np.pi)
+				#euler_angles[2] = euler_angles[2] - self.offset_yaw -(np.pi/2)-np.pi
+				self.offset_yaw += np.pi/2
+				#self.prev_yaw_angle = euler_angles[2] + np.pi/2
+
+			self.prev_yaw_angle = euler_angles[2]
+
+			self.q_rot_offset = tf.quaternion_from_euler(0,0,self.offset_yaw)
+
+			q_rotated_along_yaw = tf.quaternion_multiply(p_quat_raw, self.q_rot_offset)
+				
+			euler_angles_rotated = tf.euler_from_quaternion(q_rotated_along_yaw,axes='sxyz')
+			# print(np.degrees(euler_angles[2]),np.degrees(euler_angles_rotated[2]))
+
+			euler_angles[2] = euler_angles[2] - self.offset_yaw   ## this is must for the orientation offset
+			#euler_angles[0] = euler_angles[0] - self.offset_roll
+			#euler_angles[1] = euler_angles[1] - self.offset_pitch
+
+			#transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
+			transform = tf.compose_matrix(translate=tvec,angles=euler_angles_rotated)
+
 			inv_transform = tf.inverse_matrix(transform)
 			camera_origin = tf.translation_from_matrix(inv_transform)
 			camera_quaternion = tf.quaternion_from_euler(np.pi, 0, euler_angles[2])
@@ -438,16 +485,46 @@ class ImageSubscriber(Node):
 		(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict_package,parameters=self.arucoParams)
 		if len(corners)>0:
 			if ids[0] == 0:
-				return True , corners
+				return True , corners , 0.058
 			else:
-				return False, None
+				return False, None , 0
 		else:
+			hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+			lower = (45, 82, 176) 
+			upper = (132, 185, 255)
+			mask = cv2.inRange(hsv,lower,upper)
+			cnts,_ = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+			
+			for i,c in enumerate(cnts):
+				#print(len(c))
+				if len(c)> 100 : # calibrate the values
+					epsilon = 0.1*cv2.arcLength(c,True)
+					approx = cv2.approxPolyDP(c,epsilon,True)
+					approx = [i[0] for i in approx]
+					approx = approx[::-1]
+					# approx = [approx[3], approx[:3]]
+
+					#rect = cv2.minAreaRect(c)
+					# corners = cv2.boxPoints(approx)
+					for i in approx:
+						if i[0]<5 or i[0]>635 or i[1]<5 or i[1]>475:
+							return False, None, 0
+					# print('approx',approx)
+					if len(approx) == 4:
+						# corners_new = tuple(np.array([[np.concatenate((approx[1:],[approx[0]]))]],dtype=np.float32))		# check the data type once...
+						corners_new = tuple(np.array([[np.concatenate(([approx[3]],approx[0:3]))]],dtype=np.float32))
+						# print(corners_new)
+						cv2.imshow('temp__',mask)
+						#print('corners_new',corners_new)
+						return True , corners_new , 0.075
+
+
 			## color segmentation and detecting contours
 			## chech if color is there...
 			## if color detected na 
 			## segment and find contours and return True, corners
 			## else return False, None
-			return False, None
+			return False, None , 0
 
 
 

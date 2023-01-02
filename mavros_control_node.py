@@ -16,6 +16,7 @@ from mavros import command
 from mavros_msgs.srv import CommandBool
 from mavros_msgs.srv import SetMode
 from mavros_msgs.srv import CommandTOL
+from mavros_msgs.srv import CommandLong
 from mavros import setpoint as sp
 from rclpy.qos import QoSProfile
 from multiprocessing import shared_memory
@@ -128,7 +129,7 @@ class control_node(Node):
 		self.arm_service = self.create_client(CommandBool, '/mavros/cmd/arming')
 		self.change_mode = self.create_client(SetMode, '/mavros/set_mode')
 		self.takeoff_service = self.create_client(CommandTOL, '/mavros/cmd/takeoff')
-
+		self.command_long = self.create_client(CommandLong, '/mavros/cmd/command')
 		self.start_navigation()
 
 
@@ -205,12 +206,23 @@ class control_node(Node):
 		self.flags_status[2] = False
 		self.pkg_coord[0] = 0.0 
 		self.pkg_coord[1] = 0.0
-		self.takeoff(0.5)
+
+		self.takeoff(1.0)
+		time.sleep(2)
+		self.force_disarm()
+
+
+
+		self.takeoff(1.0)
 		time.sleep(10)
-		self.goto_target((170.1+10)/100, (-88.8-15)/100, 1.0)
-		time.sleep(10)
+		self.land()
+		time.sleep(2)
+		self.force_disarm()
+		time.sleep(30)
+		self.goto_target((170.1+10)/100, (-88-15)/100, 1.0)
+		# time.sleep(10)
 		count = 0
-		target_list = [[1.0, 0.5], [0.0, 0.5], [0.0, 1.8], [1.0, 1.8]] 
+		target_list = [[1.2, 0.5], [0.0, 0.5], [0.0, 1.8], [1.2, 1.8]] 
 
 		for target in target_list:
 			self.flags_status[0] = False        #package_detected_flag  
@@ -245,7 +257,8 @@ class control_node(Node):
 					time.sleep(0.01)
 
 				
-				self.prev_point = self.local_pos_estimate   # array that contains x and y coordinates
+				self.prev_point = self.local_pos_estimate.copy()   # array that contains x and y coordinates
+				print(self.prev_point)
 
 				self.goto_target(self.pkg_coord[0],self.pkg_coord[1],1.0) ## reduce the height to 0.5  ( fix height based on field of view)
 				time.sleep(1)
@@ -256,25 +269,41 @@ class control_node(Node):
 				#pose_publisher pose estimation 
 				self.goto_target(self.pkg_coord[0],self.pkg_coord[1],0.5)
 				time.sleep(5)
-				landing_offset = [0.0,-0.12]
+				landing_offset = [0.0,-0.09]
 				# setpoint as rotation
 				rotation_angle = self.yaw_angle[0] + np.pi/4
 				rotation_angle = np.pi/2 + ((self.yaw_angle[0] % (np.pi/2)) - np.pi/4)   # check code: 90 + np.degrees(np.radians(30)%(np.pi/2) - np.pi/4)
 
 				x_offset =  landing_offset[1] * np.sin(np.pi/2 - rotation_angle) 
 				y_offset =  landing_offset[1] * np.cos(np.pi/2 - rotation_angle)
+				print('offset_angle',np.degrees(self.yaw_angle[0]))
 				print('rotation_angle',np.degrees(rotation_angle),'offsets',x_offset,y_offset)
 
-				self.goto_target(self.pkg_coord[0], self.pkg_coord[1], 0.3, 0,0, rotation_angle)
+
+				# when board is rotated the offseted point is the origin so set target point to the offseted value
+				# compare the local_pos estimate with pkg_coord + offset
+				# while landing set target as double the offset value
+
+				while True:
+					if abs(self.local_pos_estimate[0]-(self.pkg_coord[0]))<0.015 and abs(self.local_pos_estimate[1]-(self.pkg_coord[1]))<0.015:   # local_point is shared memory
+						self.goto_target(self.pkg_coord[0], self.pkg_coord[1], 0.35, 0,0,rotation_angle)
+						time.sleep(1)
+
+						break
+					time.sleep(0.01)
+
+				#self.goto_target(self.pkg_coord[0], self.pkg_coord[1], 0.4, 0,0, rotation_angle)
 				time.sleep(5)
 				#self.goto_target(self.pkg_coord[0]-0.08, self.pkg_coord[1]-0.08, 0.4, 0,0,rotation_angle)
 				time.sleep(5)
 
-				while True:     # package_detected_flag
+				# package_detected_flag
+				while True:
 					if abs(self.local_pos_estimate[0]-(self.pkg_coord[0]))<0.015 and abs(self.local_pos_estimate[1]-(self.pkg_coord[1]))<0.015:   # local_point is shared memory
 						self.goto_target(self.pkg_coord[0]+x_offset, self.pkg_coord[1]+y_offset, 0.1, 0,0,rotation_angle)
 						time.sleep(2)
 						self.land()
+						self.turn_off_motors()
 						break
 					time.sleep(0.01)
 
@@ -282,7 +311,6 @@ class control_node(Node):
 				# time.sleep(5)
 				# self.goto_target(self.pkg_coord[0]-0.1,self.pkg_coord[1]-0.1, 0.3, 0,0,rotation_angle)
 				# time.sleep(5)
-				print('height 0.3 m')
 				# try some extra setpoint before land
 				#self.goto_target(self.pkg_coord[0]-0.1, self.pkg_coord[1]-0.1, 0.1, 0,0,self.yaw_angle[0]+np.pi/4)
 
@@ -301,8 +329,9 @@ class control_node(Node):
 				time.sleep(5)
 
 				self.flags_status[3] = False   # pose_package_flag
-				self.flags_status[1] = False   # package_coordinate_flag
+				
 				count += 1
+				print(self.prev_point)
 				self.package_drop_routine(self.prev_point,count)  # drop and then come back to previous point
 				# self.goto_target(0.1,-0.15,1.0)
 				# time.sleep(10)
@@ -312,12 +341,36 @@ class control_node(Node):
 				# 	package_picked_msg = Bool()
 				# 	package_picked_msg.data = False
 				# 	self.package_picked.publish(package_picked_msg)
-				
-				if count == 1:
+				self.flags_status[1] = False   # package_coordinate_flag
+				self.flags_status[3] = False   # pose_package_flag
+				self.flags_status[0] = False
+				self.flags_status[2] = False
+				if count == 2:
 					print('finish')
 					break
 
+	def force_disarm(self):
+		while not self.command_long.wait_for_service(timeout_sec=1):
+			self.get_logger().info('service not available, waiting again...')
+		req = CommandLong.Request()
+		req.broadcast = True
+		req.command = 400     ## MAV_CMD_COMPONENT_ARM_DISARM
+		req.param1 = 0.0
+		req.param2 = 21196.0
+		resp = self.command_long.call_async(req)
+		rclpy.spin_until_future_complete(self, resp)
+		print('Force Disarmed')
 
+
+
+	def turn_off_motors(self):
+		while not self.arm_service.wait_for_service(timeout_sec=1.0):
+			self.get_logger().info('service not available, waiting again...')
+		req = CommandBool.Request()
+		req.value = False
+		resp = self.arm_service.call_async(req)
+		rclpy.spin_until_future_complete(self, resp)
+		print('disarmed')
 
 	def goto_target(self,x,y,z,roll=0,pitch=0,yaw=np.pi/2):
 
@@ -377,6 +430,18 @@ class control_node(Node):
 		rclpy.spin_until_future_complete(self, resp)
 		print('Landed')
 
+	def terminate_motors(self):
+
+		while not self.command_long.wait_for_service(timeout_sec=1):
+			self.get_logger().info('service not available, waiting again...')
+		req = CommandLong.Request()
+		req.broadcast = True
+		req.command = 185     ## MAV_CMD_DO_FLIGHTTERMINATION 
+		req.param1 = 1.0
+		resp = self.command_long.call_async(req)
+		rclpy.spin_until_future_complete(self, resp)
+		print('Motors off')
+
 	def package_drop_routine(self,prev_point,count):
 
 		##
@@ -391,7 +456,7 @@ class control_node(Node):
 			self.package_picked.publish(package_picked_msg)
 			print('Package', count, 'dropped')
 		time.sleep(5)
-		if count == 1:
+		if count == 2:
 			print('setpoint landing pad')
 			self.goto_target(-10/100, -50/100, 1.0)
 			time.sleep(10)
@@ -401,9 +466,9 @@ class control_node(Node):
 			time.sleep(10)
 			self.land()
 		else:
-			print('setpoint', prev_point)
-			self.goto_target(prev_point[0],prev_point[1],1.0)
-			time.sleep(20)
+			print('setpoint', self.prev_point)
+			#self.goto_target(self.prev_point[0],self.prev_point[1],1.0)
+			#time.sleep(20)
 
 			## after dropping the package
 			## goto_(landind_pad_coordinate)
@@ -444,7 +509,7 @@ def wait_conn(master):
 
 
 def main(args=None):
-	master = mavutil.mavlink_connection('udpout:192.168.186.218:14590')
+	master = mavutil.mavlink_connection('udpout:192.168.125.218:14590')
 	#master = mavutil.mavlink_connection("/dev/ttyACM0", baud=115200)
 	print('waiting')
 	#master.wait_heartbeat()
