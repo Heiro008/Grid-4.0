@@ -92,8 +92,6 @@ class ImageSubscriber(Node):
 		self.camera_pose_msg.pose.orientation.z = 0.7071 
 		self.camera_pose_msg.pose.orientation.w = 0.7071
 		self.offset_yaw = None
-		self.offset_pitch = None
-		self.offset_roll = None
 		self.q_rot_offset = None
 		self.prev_yaw_angle = None
 		self.br = CvBridge()
@@ -141,7 +139,7 @@ class ImageSubscriber(Node):
 		self.board_details[3][1] = (119.5/100, 95.3/100)		# 189.5
 		self.board_details[4][1] = (0, 189.5/100)
 		self.board_details[5][1] = (119.5/100, 189.5/100)
-		self.board_details[6][1] = (-52.6/100, -88/100)
+		self.board_details[6][1] = (-8/100 , -88/100)
 		self.board_details[7][1] = (170.1/100, -88.8/100)
 		###########################################################################3
 
@@ -194,7 +192,7 @@ class ImageSubscriber(Node):
 		self.flags_status[0] , package_corners, package_tag_length = self.detect_get_pkg_corners(image)   # package_detected_flag
 		 
 		if len(corners) > 6 and not self.flags_status[3]:   # or ids!=None
-
+			self.offset_yaw = None
 			self.change_pose_count = 0      # reset the counter if normal board is detected
 			corners_split = [[] for i in range(self.no_of_boards)]  # have to check if datatype matches
 				# this will store the corners of each board in the arena, separately.
@@ -397,16 +395,11 @@ class ImageSubscriber(Node):
 			self.yaw_angle[0] = euler_angles[2]
 			if self.offset_yaw == None:
 				self.offset_yaw = euler_angles[2]
-				self.offset_pitch = euler_angles[1]
-				self.offset_roll = euler_angles[0]
 				self.prev_yaw_angle = euler_angles[2] 
 				self.q_rot_offset = tf.quaternion_from_euler(0,0,self.offset_yaw)
 				print('offset angle', np.degrees(self.offset_yaw))
 
-			
 
-
-			
 			p_quat = Quaternion()
 			p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
 			p_quat.w = p_quat_raw[0]		
@@ -484,7 +477,7 @@ class ImageSubscriber(Node):
 	def detect_get_pkg_corners(self,image):
 		(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict_package,parameters=self.arucoParams)
 		if len(corners)>0:
-			if ids[0] == 0:
+			if ids[0] == 1:
 				return True , corners , 0.058
 			else:
 				return False, None , 0
@@ -493,11 +486,14 @@ class ImageSubscriber(Node):
 			lower = (45, 82, 176) 
 			upper = (132, 185, 255)
 			mask = cv2.inRange(hsv,lower,upper)
+			# mask = cv2.dilate(mask,None,iterations=2)
+			mask = cv2.erode(mask, None,iterations=1)
+			# 
 			cnts,_ = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
 			
 			for i,c in enumerate(cnts):
-				#print(len(c))
-				if len(c)> 100 : # calibrate the values
+				# print(len(c))
+				if len(c)> 50 : # calibrate the values
 					epsilon = 0.1*cv2.arcLength(c,True)
 					approx = cv2.approxPolyDP(c,epsilon,True)
 					approx = [i[0] for i in approx]
@@ -509,14 +505,14 @@ class ImageSubscriber(Node):
 					for i in approx:
 						if i[0]<5 or i[0]>635 or i[1]<5 or i[1]>475:
 							return False, None, 0
-					# print('approx',approx)
+					# print('approx',len(approx))
 					if len(approx) == 4:
 						# corners_new = tuple(np.array([[np.concatenate((approx[1:],[approx[0]]))]],dtype=np.float32))		# check the data type once...
 						corners_new = tuple(np.array([[np.concatenate(([approx[3]],approx[0:3]))]],dtype=np.float32))
 						# print(corners_new)
 						cv2.imshow('temp__',mask)
 						#print('corners_new',corners_new)
-						return True , corners_new , 0.075
+						return True , corners_new , 0.07
 
 
 			## color segmentation and detecting contours
