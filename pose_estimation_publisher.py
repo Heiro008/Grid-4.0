@@ -84,8 +84,8 @@ class ImageSubscriber(Node):
 		self.camera_pose_msg = PoseStamped()
 		self.set_point_msg = PoseStamped()
 		self.imgae_header = 0
-		self.camera_pose_msg.pose.position.x = (170.1+10)/100
-		self.camera_pose_msg.pose.position.y = (-88-15)/100
+		self.camera_pose_msg.pose.position.x = (170.2+10)/100
+		self.camera_pose_msg.pose.position.y = (-90.3-15)/100
 		self.camera_pose_msg.pose.position.z = 0.0
 		self.camera_pose_msg.pose.orientation.x = 0.0
 		self.camera_pose_msg.pose.orientation.y = 0.0
@@ -94,6 +94,7 @@ class ImageSubscriber(Node):
 		self.offset_yaw = None
 		self.q_rot_offset = None
 		self.prev_yaw_angle = None
+		self.to_be_named_by_dev = False
 		self.br = CvBridge()
 		self.image_data = None
 		
@@ -117,7 +118,7 @@ class ImageSubscriber(Node):
 		self.distortion_coefficients = np.array( [[-3.89046329e-01 , 1.80504834e-01 , 2.65083029e-05,  8.39683505e-06 , -4.45792442e-02]])
 		############################################################################################################
 		self.tag_length = 0.055  # in metres, length of one marker on the board
-		self.tag_separation = 0.008   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
+		self.tag_separation = 0.007   # HAVE TO REDECLARE PROPERLY (in metres again, distance between adjacent markers)
 		#self.board = cv2.aruco.GridBoard_create(4, 3, self.tag_length, self.tag_separation, self.arucoDict)
 		        # first number = no. of columns of markers in the board
 		        # second number = no. of rows of markers in the board
@@ -134,13 +135,13 @@ class ImageSubscriber(Node):
 		
 		######## CHECK THESE VALUES ###########################################
 		self.board_details[0][1] = (0,0)
-		self.board_details[1][1] = (119.5/100, 0)
-		self.board_details[2][1] = (0, 95.3/100)
-		self.board_details[3][1] = (119.5/100, 95.3/100)		# 189.5
-		self.board_details[4][1] = (0, 189.5/100)
-		self.board_details[5][1] = (119.5/100, 189.5/100)
-		self.board_details[6][1] = (-8/100 , -88/100)
-		self.board_details[7][1] = (170.1/100, -88.8/100)
+		self.board_details[1][1] = (123.2/100, 0)           #(119.5/100, 0)
+		self.board_details[2][1] = (0, 96/100)              #(0, 95.3/100)
+		self.board_details[3][1] = (123.2/100, 96/100)     #(119.5/100, 95.3/100)		# 189.5
+		self.board_details[4][1] = (0, 190.8/100)           #(0, 189.5/100)
+		self.board_details[5][1] = (123.2/100, 190.8/100)   #(119.5/100, 189.5/100)
+		self.board_details[6][1] = (-4.5/100 , -90.3/100)		#(-8/100 , -88/100)
+		self.board_details[7][1] = (170.2/100, -90.3/100)     #(170.1/100, -88.8/100)
 		###########################################################################3
 
 		self.pkg_coord_x_list = []
@@ -189,9 +190,12 @@ class ImageSubscriber(Node):
 
 		# if 0 in ids_package:
 		# 	package_detected = True   
-		self.flags_status[0] , package_corners, package_tag_length = self.detect_get_pkg_corners(image)   # package_detected_flag
+		if not self.flags_status[2]:     # package_picked_flag
+			self.flags_status[0] , package_corners, package_tag_length = self.detect_get_pkg_corners(image)   # package_detected_flag
 		 
 		if len(corners) > 6 and not self.flags_status[3]:   # or ids!=None
+			if self.flags_status[2]:
+				self.to_be_named_by_dev = False
 			self.offset_yaw = None
 			self.change_pose_count = 0      # reset the counter if normal board is detected
 			corners_split = [[] for i in range(self.no_of_boards)]  # have to check if datatype matches
@@ -225,12 +229,6 @@ class ImageSubscriber(Node):
 					rvec_tmp, tvec_tmp, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners_split[i][0], self.tag_length, self.matrix_coefficients,self.distortion_coefficients)
 					self.board_details[i][4] = float(tvec_tmp[0][0][0])**2 + float(tvec_tmp[0][0][1])**2
 					boards_detected.add(i)
-					# if ids_split[i][0] == 12*i and package_detected:
-					# 	## estimate tvec of package marker 
-					# 	## process tvec of package marker and tvec_tmp 
-					# 	## if corners_color_package
-					# 	## process tvec of package marker and tvec_tmp 
-					# 	package_coordinate_flag = True
 				else:
 					continue
 					
@@ -242,14 +240,15 @@ class ImageSubscriber(Node):
 					if self.board_details[i][4] <= min_dis:
 						min_dis = self.board_details[i][4]
 						board_selected = i		
-			
-				
-				#ret_val_list.append(ret_val)
-				#rvec_list.append(rvec)
-				#tvec_list.append(tvec)
 
 			#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients, self.distortion_coefficients, tvec, rvec)
 			if board_selected!=None:
+				tvec = None
+				rvec = None
+				
+				detectedCorners, detectedIds, rejectedCorners,_ = cv2.aruco.refineDetectedMarkers(image, self.boards[board_selected], corners_split[board_selected], ids_split[board_selected], rejected)
+				# ret_val, rvec, tvec = cv2.aruco.estimatePoseBoard(corners_split[board_selected], ids_split[board_selected], self.boards[board_selected], self.matrix_coefficients, self.distortion_coefficients,rvec,tvec)
+				ret_val, rvec, tvec = cv2.aruco.estimatePoseBoard(detectedCorners, detectedIds, self.boards[board_selected], self.matrix_coefficients, self.distortion_coefficients,rvec,tvec)
 
 				if (not self.flags_status[1]) and self.flags_status[0] :   # package_detected_flag  and  package_coodinate_flag
 					########## tvec of 1st marker of board and tvec of package marker  ##################
@@ -267,15 +266,24 @@ class ImageSubscriber(Node):
 					offset_y = (tvec_tmp[0][0][1] - tvec_pkg[0][0][1]) - marker_offset_wrt_board_y
 					offset_x  += self.board_details[board_selected][1][0]
 					offset_y  += self.board_details[board_selected][1][1]
-					self.pkg_coord[0] = offset_x
-					self.pkg_coord[1] = offset_y
+					#print('tvec',tvec_pkg[0][0][0], tvec_pkg[0][0][1])
+					# self.pkg_coord[0] = offset_x
+					# self.pkg_coord[1] = offset_y
 					if len(self.pkg_coord_x_list) < 5:
 						self.pkg_coord_x_list.append(offset_x)
 						self.pkg_coord_y_list.append(offset_y)
 					else:
 						if np.std(self.pkg_coord_x_list) < 0.05  and  np.std(self.pkg_coord_y_list) < 0.05:
+							self.pkg_coord[0] = offset_x
+							self.pkg_coord[1] = offset_y
+
 							self.flags_status[1] = True   # package_coodinate_flag
+							
 							print('package_coordinate',self.pkg_coord[0],self.pkg_coord[1])
+
+							self.pkg_coord_y_list = []
+							self.pkg_coord_x_list = []
+
 						else:
 							print(np.std(self.pkg_coord_x_list), np.std(self.pkg_coord_y_list))
 							self.pkg_coord_x_list.pop(0)
@@ -289,8 +297,8 @@ class ImageSubscriber(Node):
 				# Draw a square around the markers
 				cv2.aruco.drawDetectedMarkers(image, corners_split[board_selected], ids_split[board_selected], (0,255,0)) 
 				
-				tvec = self.board_details[board_selected][2]
-				rvec = self.board_details[board_selected][3]
+				# tvec = self.board_details[board_selected][2]
+				# rvec = self.board_details[board_selected][3]
 				
 				self.object_pose_msg.header.stamp = self.get_clock().now().to_msg()
 				self.object_pose_msg.header.frame_id = 'camera'
@@ -346,12 +354,6 @@ class ImageSubscriber(Node):
 				self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
 
 				self.camera_pose.publish(self.camera_pose_msg)
-				#print(self.pkg_coord)
-				# if self.flags_status[1]: # package_coordinate_flag
-				# 	if abs(self.pkg_coord[0] - camera_origin[0]) < 0.05 and abs(self.pkg_coord[1] - camera_origin[1]) < 0.05:
-				# 		self.flags_status[2] = True  #  near_package_flag
-				# 		print('near_package_set')
-
 
 		elif self.flags_status[3]:   # pose_package_flag
 			#pose estimation based on package marker 
@@ -375,18 +377,14 @@ class ImageSubscriber(Node):
 	def publish_pose_based_on_marker(self,image):
 		tag_length = 0.058
 		#(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict_package,parameters=self.arucoParams)
-
 		detected , corners, tag_length = self.detect_get_pkg_corners(image)
 		tvec = None
 		rvec = None
 		if detected:
-			#for i in range(0, len(ids)):
 
         	# Estimate pose of each marker and return the values rvec and tvec---(different from those of camera coefficients)
 			rvec, tvec, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners[0], tag_length, self.matrix_coefficients,self.distortion_coefficients)
 			#rvec, tvec, markerPoints = cv2.aruco.estimatePoseBoard(corners,ids, self.tag_length, self.matrix_coefficients,self.distortion_coefficients,tvec,rvec)
-        	
-        	# Draw a square around the markers
 			cv2.aruco.drawDetectedMarkers(image, corners) 
 			#print(rvec[i][0])
 			rot_mat = cv2.Rodrigues(rvec[0][0])
@@ -399,7 +397,6 @@ class ImageSubscriber(Node):
 				self.q_rot_offset = tf.quaternion_from_euler(0,0,self.offset_yaw)
 				print('offset angle', np.degrees(self.offset_yaw))
 
-
 			p_quat = Quaternion()
 			p_quat_raw = tf.quaternion_from_euler(euler_angles[0], euler_angles[1], euler_angles[2])
 			p_quat.w = p_quat_raw[0]		
@@ -409,19 +406,15 @@ class ImageSubscriber(Node):
 			#p_quat = createQuaternionMsgFromRollPitchYaw(euler_angles[0], euler_angles[1], euler_angles[2])
 
 
-			if self.prev_yaw_angle - euler_angles[2]  > np.radians(80):
-				print('shifted1')
-				#self.q_rot_offset = tf.quaternion_from_euler(0,0,self.offset_yaw-(np.pi/2))
-				#self.prev_yaw_angle = euler_angles[2] - np.pi/2
-				#self.q_rot_offset = tf.quaternion_from_euler(0,0,self.offset_yaw)
-				self.offset_yaw -= np.pi/2
-				#euler_angles[2] = euler_angles[2] - self.offset_yaw
-			elif self.prev_yaw_angle - euler_angles[2]  < -np.radians(80):
-				print('shifted2')
-				#self.q_rot_offset = tf.quaternion_from_euler(0,0,self.offset_yaw-(np.pi/2)-np.pi)
-				#euler_angles[2] = euler_angles[2] - self.offset_yaw -(np.pi/2)-np.pi
-				self.offset_yaw += np.pi/2
-				#self.prev_yaw_angle = euler_angles[2] + np.pi/2
+			if self.detected_id in [3,4,5]:
+				if self.prev_yaw_angle - euler_angles[2]  > np.radians(80):
+					print('shifted1')
+					self.offset_yaw -= np.pi/2
+					#euler_angles[2] = euler_angles[2] - self.offset_yaw
+				elif self.prev_yaw_angle - euler_angles[2]  < -np.radians(80):
+					print('shifted2')
+					self.offset_yaw += np.pi/2
+					#self.prev_yaw_angle = euler_angles[2] + np.pi/2
 
 			self.prev_yaw_angle = euler_angles[2]
 
@@ -433,23 +426,16 @@ class ImageSubscriber(Node):
 			# print(np.degrees(euler_angles[2]),np.degrees(euler_angles_rotated[2]))
 
 			euler_angles[2] = euler_angles[2] - self.offset_yaw   ## this is must for the orientation offset
-			#euler_angles[0] = euler_angles[0] - self.offset_roll
-			#euler_angles[1] = euler_angles[1] - self.offset_pitch
-
-			#transform = tf.compose_matrix(translate=tvec,angles=euler_angles)
 			transform = tf.compose_matrix(translate=tvec,angles=euler_angles_rotated)
 
 			inv_transform = tf.inverse_matrix(transform)
 			camera_origin = tf.translation_from_matrix(inv_transform)
 			camera_quaternion = tf.quaternion_from_euler(np.pi, 0, euler_angles[2])
 			#'sxyz'
-
-			
-
 			q_rot = tf.quaternion_from_euler(np.pi,0, np.pi*1.5) #+self.offset_yaw
 			q_new = tf.quaternion_multiply(q_rot,camera_quaternion)					
-			q_new = tf.unit_vector(q_new)
-			#q_new.normalize()
+			q_new = tf.unit_vector(q_new)  		# q_new.normalize()
+			
 			self.camera_pose_msg.header.stamp = self.get_clock().now().to_msg()
 			self.camera_pose_msg.header.frame_id = 'map'
 			self.camera_pose_msg.pose.position.x = camera_origin[0]  + self.pkg_coord[0]
@@ -459,7 +445,6 @@ class ImageSubscriber(Node):
 			self.camera_pose_msg.pose.orientation.y = -q_new[1]  # x value
 			self.camera_pose_msg.pose.orientation.z = -q_new[3]  # z value
 			self.camera_pose_msg.pose.orientation.w = q_new[0]  # w value
-			#self.camera_pose_msg.pose.position = self.object_pose_msg.pose.position
 			self.camera_pose.publish(self.camera_pose_msg)
 
 			cv2.drawFrameAxes(image, self.matrix_coefficients, self.distortion_coefficients, rvec, tvec, 0.01)  
@@ -475,52 +460,115 @@ class ImageSubscriber(Node):
 		key = cv2.waitKey(1)
 
 	def detect_get_pkg_corners(self,image):
-		(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict_package,parameters=self.arucoParams)
-		if len(corners)>0:
-			if ids[0] == 1:
-				return True , corners , 0.058
+		known_colors = {10:[(41, 92, 69) , (85, 255, 255)],11:[(94, 135, 82) , (255, 255, 255)],12:[(151, 83, 194) , (255, 255, 255)]}
+		if self.to_be_named_by_dev:
+			(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict_package,parameters=self.arucoParams)
+			if len(corners)>0:
+				for ids_ in ids[0]:
+					#print(ids_)
+					if ids_ == self.detected_id:
+						print('detected_id',ids_)
+						return True , corners , 0.058
+					else:
+						if self.detected_id in [10,11,12]:
+							hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+							lower = known_colors[self.detected_id][0]  #(45, 82, 176)    # lower value of color id  
+							upper = known_colors[self.detected_id][1]   # (132, 185, 255)
+							mask = cv2.inRange(hsv,lower,upper)
+							# mask = cv2.dilate(mask,None,iterations=2)
+							mask = cv2.erode(mask, None,iterations=1)
+							cnts,_ = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+							
+							for i,c in enumerate(cnts):
+								if len(c)> 50 : # calibrate the values
+									epsilon = 0.1*cv2.arcLength(c,True)
+									approx = cv2.approxPolyDP(c,epsilon,True)
+									approx = [i[0] for i in approx]
+									approx = approx[::-1]
+
+									for i in approx:
+										if i[0]<5 or i[0]>635 or i[1]<5 or i[1]>475:
+											return False, None, 0
+
+									if len(approx) == 4:
+										corners_new = tuple(np.array([[np.concatenate(([approx[3]],approx[0:3]))]],dtype=np.float32))
+										cv2.imshow('temp__',mask)
+										return True , corners_new , 0.07
+						return False, None, 0
+
+			elif self.detected_id in [10,11,12]:
+				hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+				lower = known_colors[self.detected_id][0]  #(45, 82, 176)    # lower value of color id  
+				upper = known_colors[self.detected_id][1]   # (132, 185, 255)
+				mask = cv2.inRange(hsv,lower,upper)
+				# mask = cv2.dilate(mask,None,iterations=2)
+				mask = cv2.erode(mask, None,iterations=1)
+				cnts,_ = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+				
+				for i,c in enumerate(cnts):
+					if len(c)> 50 : # calibrate the values
+						epsilon = 0.1*cv2.arcLength(c,True)
+						approx = cv2.approxPolyDP(c,epsilon,True)
+						approx = [i[0] for i in approx]
+						approx = approx[::-1]
+
+						for i in approx:
+							if i[0]<5 or i[0]>635 or i[1]<5 or i[1]>475:
+								return False, None, 0
+
+						if len(approx) == 4:
+							corners_new = tuple(np.array([[np.concatenate(([approx[3]],approx[0:3]))]],dtype=np.float32))
+							cv2.imshow('temp__',mask)
+							return True , corners_new , 0.07
+
+				return False, None , 0
+			
 			else:
 				return False, None , 0
+
+
 		else:
-			hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-			lower = (45, 82, 176) 
-			upper = (132, 185, 255)
-			mask = cv2.inRange(hsv,lower,upper)
-			# mask = cv2.dilate(mask,None,iterations=2)
-			mask = cv2.erode(mask, None,iterations=1)
-			# 
-			cnts,_ = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
-			
-			for i,c in enumerate(cnts):
-				# print(len(c))
-				if len(c)> 50 : # calibrate the values
-					epsilon = 0.1*cv2.arcLength(c,True)
-					approx = cv2.approxPolyDP(c,epsilon,True)
-					approx = [i[0] for i in approx]
-					approx = approx[::-1]
-					# approx = [approx[3], approx[:3]]
+			(corners, ids, rejected) = cv2.aruco.detectMarkers(image, self.arucoDict_package,parameters=self.arucoParams)
+			if len(corners)>0:
+				print(ids[0])
+				for ids_ in ids[0]:
+					if ids_ in [0,1,2]:
+						self.detected_id = ids_
+						print('detected_id_color',ids_)
+						self.to_be_named_by_dev = True
+						return True , corners , 0.058
+					else:
+						return False, None , 0
+			else:
+				for color_id in known_colors:
+					hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+					lower = known_colors[color_id][0]   # (45, 82, 176)  
+					upper = known_colors[color_id][1]   # (132, 185, 255)
+					# (color_id, lower, upper)
+					mask = cv2.inRange(hsv,lower,upper)
+					# mask = cv2.dilate(mask,None,iterations=2)
+					mask = cv2.erode(mask, None,iterations=1)
+					cnts,_ = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+					
+					for i,c in enumerate(cnts):
+						if len(c)> 50 : # calibrate the values
+							epsilon = 0.1*cv2.arcLength(c,True)
+							approx = cv2.approxPolyDP(c,epsilon,True)
+							approx = [i[0] for i in approx]
+							approx = approx[::-1]
+							for i in approx:
+								if i[0]<100 or i[0]>540 or i[1]<100 or i[1]>380:
+									return False, None, 0
+							if len(approx) == 4:
+								corners_new = tuple(np.array([[np.concatenate(([approx[3]],approx[0:3]))]],dtype=np.float32))
+								cv2.imshow('temp__',mask)
+								self.detected_id = color_id
+								print('detected_id',color_id)
+								self.to_be_named_by_dev = True
 
-					#rect = cv2.minAreaRect(c)
-					# corners = cv2.boxPoints(approx)
-					for i in approx:
-						if i[0]<5 or i[0]>635 or i[1]<5 or i[1]>475:
-							return False, None, 0
-					# print('approx',len(approx))
-					if len(approx) == 4:
-						# corners_new = tuple(np.array([[np.concatenate((approx[1:],[approx[0]]))]],dtype=np.float32))		# check the data type once...
-						corners_new = tuple(np.array([[np.concatenate(([approx[3]],approx[0:3]))]],dtype=np.float32))
-						# print(corners_new)
-						cv2.imshow('temp__',mask)
-						#print('corners_new',corners_new)
-						return True , corners_new , 0.07
+								return True , corners_new , 0.07
 
-
-			## color segmentation and detecting contours
-			## chech if color is there...
-			## if color detected na 
-			## segment and find contours and return True, corners
-			## else return False, None
-			return False, None , 0
+				return False, None , 0
 
 
 
@@ -547,7 +595,6 @@ def main(args=None):
     # when the garbage collector destroys the node object)
     image_subscriber.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
