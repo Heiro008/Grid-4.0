@@ -19,7 +19,8 @@ from mavros_msgs.srv import CommandTOL
 from mavros import setpoint as sp
 from rclpy.qos import QoSProfile
 from multiprocessing import shared_memory
-
+from std_msgs.msg import Bool
+from geometry_msgs.msg import TwistStamped
 
 class control_node(Node):
 	def __init__(self):
@@ -32,17 +33,27 @@ class control_node(Node):
 		self.local_position = self.create_subscription(PoseStamped, '/mavros/local_position/pose', self.callback, qos_profile)
 		self.local_position
 
+		self.local_velocity = self.create_subscription(TwistStamped, '/mavros/local_position/velocity_body', self.update_vel, qos_profile)
+		self.local_velocity
+
+		self.package_picked = self.create_subscription(Bool, '/package_picked_up',self.package_picked_up, 10)
+		self.package_picked
+
 		self.a = np.array([0.0, 0.0], dtype=np.float64)
 		self.shm = shared_memory.SharedMemory(name = 'Local_position', create=True, size=self.a.nbytes)
 		self.b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
 
+		self.l_vel = np.array([0.0, 0.0], dtype=np.float64)
+		self.shm_vel = shared_memory.SharedMemory(name = 'local_velocity', create=True, size=self.a.nbytes)
+		self.local_vel = np.ndarray(self.l_vel.shape, dtype=self.l_vel.dtype, buffer=self.shm_vel.buf)
+
 		# 0 -> package_detected
 		# 1 -> package_coordinate_flag
-		# 2 -> near_package 
+		# 2 -> package_picked 
 		# 3 -> pose_package
 		self.flags = np.array([0,0,0,0], dtype=bool)
 		self.shm_flags = shared_memory.SharedMemory(name = 'flags', create=True, size=self.flags.nbytes)
-		#self.b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
+		self.flags_status = np.ndarray(self.flags.shape, dtype=self.flags.dtype, buffer=self.shm_flags.buf)
 
 		self.package_coordinate = np.array([0.74, 0.36], dtype=np.float64)
 		self.package_coordinate = np.array([0.0, 0.0], dtype=np.float64)
@@ -66,10 +77,17 @@ class control_node(Node):
 		self.shm_flags.unlink()
 		self.shm_pkg_coord.close()
 		self.shm_pkg_coord.unlink()
+		self.shm_vel.close()
+		self.shm_vel.unlink()
 
 		print('closed')
 
-			
+	def update_vel(self, data):
+		self.l_vel[0] = data.twist.linear.x
+		self.l_vel[1] = data.twist.linear.y
+		self.local_vel[:] = self.l_vel[:]
+		#print('vel',self.l_vel[0],self.l_vel[1])
+
 	def callback(self, data):
 
 		local_position_msg = data
@@ -80,7 +98,8 @@ class control_node(Node):
 		#b = np.ndarray(self.a.shape, dtype=self.a.dtype, buffer=self.shm.buf)
 		self.b[:] = self.a[:]
 
-		
+	def package_picked_up(self, data):
+		self.flags_status[2] = data.data   # package_picked_flag
 
 def main(args=None):
 
